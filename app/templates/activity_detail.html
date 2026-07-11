@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-title">
+  <div><p class="eyebrow">Atividade</p><h1>{{ activity.activity_type|title }}</h1></div>
+  <span class="pill">{{ activity.duplicate_status }}</span>
+</section>
+<section class="metric-grid">
+  <article><span>Duração</span><strong>{{ activity.total_duration_seconds|seconds }}</strong></article>
+  <article><span>Distância</span><strong>{{ ((activity.distance_meters or 0) / 1000)|round(1) }} km</strong></article>
+  <article><span>FC média</span><strong>{{ activity.avg_hr or "-" }}</strong></article>
+  <article><span>FC máxima</span><strong>{{ activity.max_hr or "-" }}</strong></article>
+  <article><span>Cadência</span><strong>{{ activity.cadence or "-" }}</strong></article>
+  <article><span>Potência</span><strong>{{ activity.power_watts or "-" }}</strong></article>
+</section>
+<section class="charts">
+  {% for label, field in [("Frequência cardíaca","heart_rate"),("Ritmo","pace_seconds_per_km"),("Cadência","cadence"),("Potência","power_watts"),("Elevação","altitude_meters")] %}
+  <article class="panel">
+    <h2>{{ label }}</h2>
+    <div class="sparkline">
+      {% for sample in activity.samples[:24] %}
+        {% set value = sample|attr(field) or 0 %}
+        <span style="height: {{ 12 + (value % 80) }}px"></span>
+      {% endfor %}
+    </div>
+  </article>
+  {% endfor %}
+</section>
+<section class="two-col">
+  <article class="panel"><h2>Voltas</h2>
+    <table><thead><tr><th>#</th><th>Duração</th><th>Distância</th><th>FC</th></tr></thead><tbody>
+      {% for lap in activity.laps %}
+      <tr><td>{{ lap.lap_index }}</td><td>{{ lap.duration_seconds|seconds }}</td><td>{{ ((lap.distance_meters or 0)/1000)|round(2) }} km</td><td>{{ lap.avg_hr or "-" }}</td></tr>
+      {% endfor %}
+    </tbody></table>
+  </article>
+  <article class="panel"><h2>Observações</h2><p>{{ activity.notes or "Sem observações." }}</p><p class="muted">{{ activity.duplicate_decision or "" }}</p></article>
+</section>
+{% endblock %}

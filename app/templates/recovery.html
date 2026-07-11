@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-title"><div><p class="eyebrow">Recuperação</p><h1>Histórico diário</h1></div></section>
+<section class="panel">
+<table><thead><tr><th>Dia</th><th>Recovery</th><th>HRV</th><th>Repouso</th><th>Strain</th></tr></thead><tbody>
+{% for recovery in recoveries %}
+<tr><td>{{ recovery.day.strftime("%d/%m/%Y") }}</td><td>{{ recovery.recovery_score or "-" }}%</td><td>{{ recovery.hrv_ms or "-" }}</td><td>{{ recovery.resting_hr or "-" }}</td><td>{{ recovery.daily_strain or "-" }}</td></tr>
+{% endfor %}
+</tbody></table>
+</section>
+{% endblock %}

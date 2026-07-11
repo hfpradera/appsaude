@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-title"><div><p class="eyebrow">Histórico</p><h1>Atividades</h1></div></section>
+<section class="panel">
+  <table>
+    <thead><tr><th>Data</th><th>Tipo</th><th>Duração</th><th>Distância</th><th>FC</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for activity in activities %}
+      <tr>
+        <td><a href="/atividades/{{ activity.id }}">{{ activity.started_at|localdt }}</a></td>
+        <td>{{ activity.activity_type }}</td>
+        <td>{{ activity.total_duration_seconds|seconds }}</td>
+        <td>{{ ((activity.distance_meters or 0) / 1000)|round(1) }} km</td>
+        <td>{{ activity.avg_hr or "-" }}</td>
+        <td>{{ activity.duplicate_status }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

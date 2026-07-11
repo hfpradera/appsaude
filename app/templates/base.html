@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title or "Humberto Performance" }}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/hoje">Humberto Performance</a>
+    <nav>
+      <a href="/hoje">Hoje</a>
+      <a href="/atividades">Atividades</a>
+      <a href="/sono">Sono</a>
+      <a href="/recuperacao">Recuperação</a>
+      <a href="/checkin">Check-in</a>
+      <a href="/relatorio-semanal">Relatório</a>
+      <a href="/importacoes">Importações</a>
+      <a href="/integracoes">Integrações</a>
+      <a href="/configuracoes">Configurações</a>
+    </nav>
+    <form method="post" action="/logout"><button class="icon-button" title="Sair">⏻</button></form>
+  </header>
+  <main class="shell">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

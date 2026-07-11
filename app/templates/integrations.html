@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-title"><div><p class="eyebrow">Integrações</p><h1>Fontes externas</h1></div></section>
+<section class="three-col">
+  <article class="panel"><h2>Strava</h2><p>Fase 2. OAuth 2.0 será implementado somente após consulta da documentação oficial atual.</p><button disabled>Conectar Strava</button></article>
+  <article class="panel"><h2>WHOOP</h2><p>Fase 3. Métricas serão limitadas ao que a API oficial disponibilizar.</p><button disabled>Conectar WHOOP</button></article>
+  <article class="panel"><h2>Garmin</h2><p>Fase 4. Prioridade: API oficial aprovada, FIT e atividades sincronizadas para Strava.</p><a class="button" href="/importacoes">Importar FIT</a></article>
+</section>
+{% endblock %}

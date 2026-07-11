@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-title">
+  <div>
+    <p class="eyebrow">Hoje</p>
+    <h1>{{ data.day.strftime("%d/%m/%Y") }}</h1>
+  </div>
+  <span class="pill">{{ data.classification.label }}</span>
+</section>
+
+<section class="metric-grid">
+  <article><span>Recovery</span><strong>{{ data.recovery.recovery_score if data.recovery else "-" }}%</strong></article>
+  <article><span>HRV</span><strong>{{ data.recovery.hrv_ms if data.recovery else "-" }} ms</strong></article>
+  <article><span>Repouso</span><strong>{{ data.recovery.resting_hr if data.recovery else "-" }} bpm</strong></article>
+  <article><span>Sono</span><strong>{{ data.sleep.sleep_duration_seconds|seconds if data.sleep else "-" }}</strong></article>
+  <article><span>Strain</span><strong>{{ data.recovery.daily_strain if data.recovery else "-" }}</strong></article>
+  <article><span>Qualidade</span><strong>{{ data.data_quality }}</strong></article>
+</section>
+
+<section class="two-col">
+  <article class="panel">
+    <h2>Carga e semana</h2>
+    <dl class="rows">
+      <div><dt>Últimos 7 dias</dt><dd>{{ data.load_7d_seconds|seconds }}</dd></div>
+      <div><dt>Últimos 28 dias</dt><dd>{{ data.load_28d_seconds|seconds }}</dd></div>
+      <div><dt>Distância semanal</dt><dd>{{ data.weekly_distance_km }} km</dd></div>
+      <div><dt>Duração semanal</dt><dd>{{ data.weekly_duration }}</dd></div>
+      <div><dt>Média 4 semanas</dt><dd>{{ data.four_week_avg }}</dd></div>
+    </dl>
+  </article>
+  <article class="panel">
+    <h2>Sugestão conservadora</h2>
+    <p>{{ data.classification.reasons|join(" ") }}</p>
+    {% for warning in data.classification.warnings %}
+      <p class="alert">{{ warning }}</p>
+    {% endfor %}
+    <p class="muted">O sistema não faz diagnóstico médico nem libera clinicamente para exercício.</p>
+  </article>
+</section>
+
+<section class="panel">
+  <h2>Atividade mais recente</h2>
+  {% if data.recent_activity %}
+    <p><a href="/atividades/{{ data.recent_activity.id }}">{{ data.recent_activity.activity_type|title }}</a> em {{ data.recent_activity.started_at|localdt }} · {{ data.recent_activity.total_duration_seconds|seconds }}</p>
+  {% else %}
+    <p>Nenhuma atividade registrada.</p>
+  {% endif %}
+</section>
+{% endblock %}

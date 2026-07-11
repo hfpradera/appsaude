@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-title"><div><p class="eyebrow">Dados</p><h1>Importações</h1></div></section>
+<form method="post" enctype="multipart/form-data" class="panel form-grid">
+  <label>Fonte<input name="source_name" value="manual"></label>
+  <label>Arquivo CSV, JSON ou FIT<input type="file" name="file" required></label>
+  <button type="submit">Importar</button>
+</form>
+<section class="panel">
+<table><thead><tr><th>Arquivo</th><th>Fonte</th><th>Status</th><th>Registros</th><th>Erro</th></tr></thead><tbody>
+{% for job in jobs %}
+<tr><td>{{ job.file_name }}</td><td>{{ job.source_name }}</td><td>{{ job.status }}</td><td>{{ job.records_imported }}</td><td>{{ job.error_message or "" }}</td></tr>
+{% endfor %}
+</tbody></table>
+</section>
+{% endblock %}

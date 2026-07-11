@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-title"><div><p class="eyebrow">Relatório</p><h1>Semana</h1></div></section>
+<section class="metric-grid">
+  <article><span>Treinos</span><strong>{{ report.workouts }}</strong></article>
+  <article><span>Distância</span><strong>{{ report.distance_km }} km</strong></article>
+  <article><span>Duração</span><strong>{{ report.duration }}</strong></article>
+  <article><span>Progressão</span><strong>{{ report.progression_percent if report.progression_percent is not none else "-" }}%</strong></article>
+  <article><span>Monotonia</span><strong>{{ report.monotony }}</strong></article>
+  <article><span>Recovery médio</span><strong>{{ report.avg_recovery or "-" }}</strong></article>
+</section>
+<section class="two-col">
+  <article class="panel"><h2>Alertas</h2>{% for alert in report.alerts %}<p>{{ alert }}</p>{% endfor %}</article>
+  <article class="panel"><h2>Semana seguinte</h2><p>{{ report.recommendation }}</p></article>
+</section>
+<section class="panel"><h2>Relatório diário em Markdown</h2><pre>{{ daily }}</pre></section>
+{% endblock %}

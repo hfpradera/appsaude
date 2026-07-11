@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-title"><div><p class="eyebrow">Check-in</p><h1>Registro de hoje</h1></div></section>
+<form method="post" class="panel form-grid">
+  {% for name, label in [("perceived_effort","Esforço percebido"),("sleep_quality","Qualidade do sono"),("energy","Energia"),("muscle_soreness","Dor muscular")] %}
+  <label>{{ label }}<input type="number" min="0" max="10" name="{{ name }}" value="{{ checkin|attr(name) if checkin else 0 }}"></label>
+  {% endfor %}
+  <label>Dores por região<input name="pain_regions" value="{{ checkin.pain_regions if checkin else '' }}"></label>
+  <label>Humor<input name="mood" value="{{ checkin.mood if checkin else '' }}"></label>
+  <label>Cafeína<input name="caffeine_amount" value="{{ checkin.caffeine_amount if checkin else '' }}"></label>
+  <label>Última cafeína<input name="last_caffeine_at" value="{{ checkin.last_caffeine_at if checkin else '' }}"></label>
+  <label>Álcool<input name="alcohol" value="{{ checkin.alcohol if checkin else '' }}"></label>
+  <label>Alimentação perto do sono<input name="food_near_sleep" value="{{ checkin.food_near_sleep if checkin else '' }}"></label>
+  <label class="wide">Sinais de alerta<textarea name="red_flags">{{ checkin.red_flags if checkin else '' }}</textarea></label>
+  <label class="wide">Observações<textarea name="notes">{{ checkin.notes if checkin else '' }}</textarea></label>
+  <button type="submit">Salvar check-in</button>
+</form>
+{% endblock %}

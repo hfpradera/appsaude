@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-title"><div><p class="eyebrow">Sono</p><h1>Noites registradas</h1></div></section>
+<section class="panel">
+<table><thead><tr><th>Dia</th><th>Duração</th><th>Necessidade</th><th>Eficiência</th><th>Débito</th></tr></thead><tbody>
+{% for sleep in sleeps %}
+<tr><td>{{ sleep.day.strftime("%d/%m/%Y") }}</td><td>{{ sleep.sleep_duration_seconds|seconds }}</td><td>{{ sleep.sleep_need_seconds|seconds }}</td><td>{{ sleep.efficiency_percent or "-" }}%</td><td>{{ sleep.sleep_debt_seconds|seconds }}</td></tr>
+{% endfor %}
+</tbody></table>
+</section>
+{% endblock %}

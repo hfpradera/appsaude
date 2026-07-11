@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-title"><div><p class="eyebrow">Sistema</p><h1>Configurações</h1></div></section>
+<section class="two-col">
+  <article class="panel"><h2>Ambiente</h2><p>Banco: {{ settings.database_url }}</p><p>Fuso: {{ settings.app_timezone }}</p><p>Uploads: {{ settings.upload_dir }}</p></article>
+  <article class="panel"><h2>Exportação</h2><p><a href="/export/json">Baixar JSON</a></p><p><a href="/export/markdown">Baixar Markdown</a></p></article>
+</section>
+<section class="panel danger"><h2>Exclusão local</h2><p>Remove dados importados e registros do MVP para este usuário.</p><form method="post" action="/configuracoes/excluir-dados"><button type="submit">Excluir dados locais</button></form></section>
+{% endblock %}
