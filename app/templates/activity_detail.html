@@ -5,6 +5,13 @@
   <span class="pill">{{ activity.duplicate_status }}</span>
 </section>
 <section class="metric-grid">
+  <article><span>Fonte</span><strong>{{ activity.data_source.name }}</strong></article>
+  <article><span>Inicio</span><strong>{{ activity.started_at|localdt }}</strong></article>
+  <article><span>Fim</span><strong>{{ activity.ended_at|localdt }}</strong></article>
+  <article><span>Em movimento</span><strong>{{ activity.moving_time_seconds|seconds }}</strong></article>
+  <article><span>Ritmo</span><strong>{{ activity.avg_pace_seconds_per_km|seconds }} /km</strong></article>
+  <article><span>Calorias</span><strong>{{ activity.calories or "-" }}</strong></article>
+  <article><span>Elevacao</span><strong>{{ activity.elevation_gain_meters or "-" }} m</strong></article>
   <article><span>Duração</span><strong>{{ activity.total_duration_seconds|seconds }}</strong></article>
   <article><span>Distância</span><strong>{{ ((activity.distance_meters or 0) / 1000)|round(1) }} km</strong></article>
   <article><span>FC média</span><strong>{{ activity.avg_hr or "-" }}</strong></article>

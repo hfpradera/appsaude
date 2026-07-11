@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import json
 import shutil
 from datetime import timedelta
@@ -102,6 +103,10 @@ def import_fit(db: Session, user_id: int, file_path: Path, source_name: str = "g
         raise RuntimeError("Biblioteca fitparse nao instalada.") from exc
 
     source = get_or_create_source(db, source_name, "fit")
+    external_id = f"fit:{hashlib.sha256(file_path.read_bytes()).hexdigest()}"
+    if db.scalar(select(Activity).where(Activity.data_source_id == source.id, Activity.external_id == external_id)):
+        return 0
+
     fit_file = FitFile(str(file_path))
     sessions: list[dict[str, Any]] = []
     laps: list[dict[str, Any]] = []
@@ -124,24 +129,53 @@ def import_fit(db: Session, user_id: int, file_path: Path, source_name: str = "g
     if not start:
         raise ValueError("Arquivo FIT sem horario inicial.")
     duration = _to_int(session.get("total_timer_time") or session.get("total_elapsed_time"))
+    distance = _to_float(session.get("total_distance"))
+    avg_speed = _to_float(session.get("enhanced_avg_speed") or session.get("avg_speed"))
+    if avg_speed is None and duration and distance:
+        avg_speed = distance / duration
+    avg_pace = duration / (distance / 1000) if duration and distance and distance > 0 else None
+    device = _fit_device_label(file_path)
+    present = sorted(
+        {
+            key
+            for values in (session, *samples)
+            for key, value in values.items()
+            if value is not None and "position" not in key and not key.endswith(("_lat", "_long"))
+        }
+    )
+    warnings = []
+    if not session.get("total_moving_time"):
+        warnings.append("Tempo em movimento ausente; usado tempo do cronometro.")
+    if not session.get("enhanced_avg_speed") and not session.get("avg_speed"):
+        warnings.append("Velocidade media ausente; calculada por distancia e duracao.")
+    notes = " | ".join([
+        "Origem: FIT Garmin",
+        f"Dispositivo: {device}" if device else "Dispositivo: nao identificado",
+        f"Qualidade: {'boa' if len(present) >= 8 else 'parcial'}",
+        f"Campos presentes: {', '.join(present)}",
+        f"Avisos: {'; '.join(warnings) if warnings else 'nenhum'}",
+        "Localizacao: ocultada e nao armazenada",
+    ])
     activity = Activity(
         user_id=user_id,
         data_source_id=source.id,
-        external_id=session.get("sport_profile_name") or file_path.stem,
+        external_id=external_id,
         activity_type=str(session.get("sport") or "treino"),
-        started_at=start,
+        started_at=ensure_utc(start),
         ended_at=start + timedelta(seconds=duration) if duration else None,
         total_duration_seconds=duration,
-        moving_time_seconds=_to_int(session.get("total_timer_time")),
-        distance_meters=_to_float(session.get("total_distance")),
-        avg_speed_mps=_to_float(session.get("avg_speed")),
+        moving_time_seconds=_to_int(session.get("total_moving_time") or session.get("total_timer_time")),
+        distance_meters=distance,
+        avg_pace_seconds_per_km=avg_pace,
+        avg_speed_mps=avg_speed,
         avg_hr=_to_float(session.get("avg_heart_rate")),
         max_hr=_to_float(session.get("max_heart_rate")),
-        cadence=_to_float(session.get("avg_cadence")),
+        cadence=_to_float(session.get("avg_running_cadence") or session.get("avg_cadence")),
         power_watts=_to_float(session.get("avg_power")),
         calories=_to_float(session.get("total_calories")),
         elevation_gain_meters=_to_float(session.get("total_ascent")),
         original_file_path=str(file_path),
+        notes=notes,
     )
     db.add(activity)
     db.flush()
@@ -156,14 +190,14 @@ def import_fit(db: Session, user_id: int, file_path: Path, source_name: str = "g
                 distance_meters=_to_float(lap.get("total_distance")),
                 avg_hr=_to_float(lap.get("avg_heart_rate")),
                 max_hr=_to_float(lap.get("max_heart_rate")),
-                avg_speed_mps=_to_float(lap.get("avg_speed")),
+                avg_speed_mps=_to_float(lap.get("enhanced_avg_speed") or lap.get("avg_speed")),
             )
         )
 
     for sample in samples:
         timestamp = parse_datetime(sample.get("timestamp"))
         if timestamp:
-            speed = _to_float(sample.get("speed"))
+            speed = _to_float(sample.get("enhanced_speed") or sample.get("speed"))
             db.add(
                 ActivitySample(
                     activity_id=activity.id,
@@ -172,7 +206,7 @@ def import_fit(db: Session, user_id: int, file_path: Path, source_name: str = "g
                     pace_seconds_per_km=1000 / speed if speed and speed > 0 else None,
                     cadence=_to_float(sample.get("cadence")),
                     power_watts=_to_float(sample.get("power")),
-                    altitude_meters=_to_float(sample.get("altitude")),
+                    altitude_meters=_to_float(sample.get("enhanced_altitude") or sample.get("altitude")),
                     speed_mps=speed,
                     temperature_c=_to_float(sample.get("temperature")),
                 )
@@ -181,6 +215,19 @@ def import_fit(db: Session, user_id: int, file_path: Path, source_name: str = "g
     mark_duplicates_for_review(db, activity)
     db.commit()
     return 1
+
+
+def _fit_device_label(file_path: Path) -> str | None:
+    from fitparse import FitFile
+
+    for message in FitFile(str(file_path)).get_messages("device_info"):
+        values = {field.name: field.value for field in message}
+        if values.get("manufacturer") == "garmin" and values.get("garmin_product"):
+            label = f"Garmin produto {values['garmin_product']}"
+            if values.get("software_version") is not None:
+                label += f" (software {values['software_version']})"
+            return label
+    return None
 
 
 def save_upload(upload_dir: Path, original_name: str, content: bytes) -> Path:

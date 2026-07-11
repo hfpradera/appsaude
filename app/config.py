@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/humberto_performance.db"
     app_timezone: str = "America/Sao_Paulo"
     app_demo_data: bool = True
+    hide_location: bool = True
     upload_dir: Path = Path("./data/uploads")
     export_dir: Path = Path("./data/exports")
 
