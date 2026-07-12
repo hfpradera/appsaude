@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
@@ -13,6 +13,7 @@ from app.models import (
     DailyRecovery,
     DataSource,
     ImportJob,
+    IntegrationState,
     OAuthCredential,
     Sleep,
     SubjectiveCheckin,
@@ -247,7 +248,9 @@ async def upload_import(
 
 
 @router.get("/integracoes", response_class=HTMLResponse)
-def integrations_page(request: Request, user: User = Depends(current_user)) -> HTMLResponse:
+def integrations_page(
+    request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> HTMLResponse:
     settings = get_settings()
     strava_missing = []
     if not settings.strava_client_id:
@@ -256,18 +259,40 @@ def integrations_page(request: Request, user: User = Depends(current_user)) -> H
         strava_missing.append("Client Secret")
     if not settings.token_encryption_key:
         strava_missing.append("TOKEN_ENCRYPTION_KEY")
+    strava_source = db.scalar(select(DataSource).where(DataSource.name == "strava"))
+    credential = None
+    integration_state = None
+    if strava_source:
+        credential = db.scalar(
+            select(OAuthCredential).where(
+                OAuthCredential.user_id == user.id,
+                OAuthCredential.data_source_id == strava_source.id,
+            )
+        )
+        integration_state = db.scalar(
+            select(IntegrationState).where(
+                IntegrationState.user_id == user.id,
+                IntegrationState.data_source_id == strava_source.id,
+            )
+        )
+    connected = credential is not None
     return render(
         request,
         "integrations.html",
         {
             "request": request,
             "user": user,
-            "strava_status": "desativado"
+            "strava_status": "conectado"
+            if connected
+            else "desativado"
             if not settings.strava_enabled
             else "nao configurado"
             if not settings.strava_configured
             else "pronto para conectar",
+            "strava_connected": connected,
             "strava_configured": settings.strava_configured,
+            "strava_scopes": credential.scopes if credential else None,
+            "strava_last_sync": integration_state.last_synced_at if integration_state else None,
             "strava_missing": strava_missing,
             "strava_redirect_uri": settings.effective_strava_redirect_uri,
             "message": request.query_params.get("message"),
@@ -297,6 +322,7 @@ def strava_callback(
     request: Request,
     code: str | None = None,
     state: str | None = None,
+    scope: str | None = None,
     error: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
@@ -311,7 +337,8 @@ def strava_callback(
         return RedirectResponse("/integracoes?message=Retorno+OAuth+invalido", status_code=303)
     try:
         tokens = StravaClient().exchange_code(code)
-        if not scopes_are_sufficient(tokens.get("scope")):
+        granted_scope = tokens.get("scope") or scope
+        if not scopes_are_sufficient(granted_scope):
             raise StravaError("Escopo activity:read nao concedido.")
         source = db.scalar(select(DataSource).where(DataSource.name == "strava")) or DataSource(
             name="strava", kind="oauth"
@@ -329,10 +356,31 @@ def strava_callback(
             )
         credential.encrypted_access_token = encrypt_token(tokens["access_token"])
         credential.encrypted_refresh_token = encrypt_token(tokens["refresh_token"])
-        credential.scopes = tokens.get("scope")
+        if tokens.get("expires_at"):
+            credential.expires_at = datetime.fromtimestamp(int(tokens["expires_at"]), UTC)
+        credential.token_type = tokens.get("token_type")
+        credential.scopes = granted_scope
         db.add(credential)
+        integration_state = db.scalar(
+            select(IntegrationState).where(
+                IntegrationState.user_id == user.id,
+                IntegrationState.data_source_id == source.id,
+            )
+        )
+        if integration_state is None:
+            integration_state = IntegrationState(user_id=user.id, data_source_id=source.id)
+        athlete = tokens.get("athlete") or {}
+        integration_state.status = "connected"
+        integration_state.athlete_external_id = str(athlete.get("id")) if athlete.get("id") else None
+        full_name = " ".join(
+            part for part in [athlete.get("firstname"), athlete.get("lastname")] if part
+        )
+        integration_state.athlete_name = full_name or athlete.get("username")
+        integration_state.last_error = None
+        db.add(integration_state)
         db.commit()
-    except (StravaError, KeyError):
+    except (RuntimeError, StravaError, KeyError, ValueError):
+        db.rollback()
         return RedirectResponse("/integracoes?message=Falha+ao+conectar+Strava", status_code=303)
     response = RedirectResponse("/integracoes?message=Strava+conectado", status_code=303)
     response.delete_cookie("hp_strava_state")
