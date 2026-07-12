@@ -15,8 +15,21 @@ class Settings(BaseSettings):
     app_timezone: str = "America/Sao_Paulo"
     app_demo_data: bool = True
     hide_location: bool = True
+    strava_client_id: str = ""
+    strava_client_secret: str = ""
+    strava_redirect_uri: str = "http://127.0.0.1:8000/integrations/strava/callback"
+    strava_enabled: bool = False
+    token_encryption_key: str = ""
+    strava_sync_overlap_minutes: int = 60
+    strava_sync_per_page: int = 100
+    strava_http_timeout_seconds: int = 15
+    strava_refresh_margin_seconds: int = 300
     upload_dir: Path = Path("./data/uploads")
     export_dir: Path = Path("./data/exports")
+
+    @property
+    def strava_configured(self) -> bool:
+        return self.strava_enabled and bool(self.strava_client_id and self.strava_client_secret and self.token_encryption_key)
 
 
 @lru_cache

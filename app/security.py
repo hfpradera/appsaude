@@ -38,6 +38,23 @@ def password_matches(candidate: str) -> bool:
     return hmac.compare_digest(candidate, expected)
 
 
+def make_oauth_state_cookie(state: str) -> str:
+    created = str(int(time.time()))
+    payload = f"{state}:{created}"
+    return f"{payload}:{_sign(payload)}"
+
+
+def verify_oauth_state_cookie(cookie: str | None, state: str, max_age_seconds: int = 600) -> bool:
+    if not cookie:
+        return False
+    try:
+        saved_state, created, signature = cookie.rsplit(":", 2)
+        payload = f"{saved_state}:{created}"
+        return hmac.compare_digest(saved_state, state) and hmac.compare_digest(_sign(payload), signature) and int(time.time()) - int(created) <= max_age_seconds
+    except ValueError:
+        return False
+
+
 def redact_secret(value: str) -> str:
     lowered = value.lower()
     for marker in ("token", "secret", "password", "authorization"):

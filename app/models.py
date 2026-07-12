@@ -42,6 +42,23 @@ class OAuthCredential(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class IntegrationState(Base):
+    __tablename__ = "integration_states"
+    __table_args__ = (UniqueConstraint("user_id", "data_source_id", name="uq_integration_user_source"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    data_source_id: Mapped[int] = mapped_column(ForeignKey("data_sources.id"), index=True)
+    athlete_external_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    athlete_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default="disconnected")
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_imported_count: Mapped[int] = mapped_column(Integer, default=0)
+    sync_cursor_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
 class Activity(Base):
     __tablename__ = "activities"
     __table_args__ = (
@@ -124,6 +141,26 @@ class ActivityRelationship(Base):
     relationship_type: Mapped[str] = mapped_column(String(40), default="possible_duplicate")
     decision_reason: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class ActivitySourceLink(Base):
+    __tablename__ = "activity_source_links"
+    __table_args__ = (UniqueConstraint("data_source_id", "external_id", name="uq_source_link_external"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    activity_id: Mapped[int] = mapped_column(ForeignKey("activities.id"), index=True)
+    data_source_id: Mapped[int] = mapped_column(ForeignKey("data_sources.id"), index=True)
+    external_id: Mapped[str] = mapped_column(String(255))
+    source_type: Mapped[str] = mapped_column(String(40))
+    source_data_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default="linked")
+    reconciliation_method: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    reconciliation_confidence: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    reconciliation_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reconciliation_evidence_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    linked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
 
 class DailyRecovery(Base):

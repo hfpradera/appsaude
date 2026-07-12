@@ -8,16 +8,43 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
-from app.models import Activity, DailyRecovery, ImportJob, Sleep, SubjectiveCheckin, User
-from app.security import make_session_cookie, password_matches, verify_session_cookie
+from app.models import (
+    Activity,
+    DailyRecovery,
+    DataSource,
+    ImportJob,
+    OAuthCredential,
+    Sleep,
+    SubjectiveCheckin,
+    SyncLog,
+    User,
+)
+from app.security import (
+    make_oauth_state_cookie,
+    make_session_cookie,
+    password_matches,
+    verify_oauth_state_cookie,
+    verify_session_cookie,
+)
 from app.services import reports
 from app.services.importers import import_file, save_upload
+from app.services.strava import (
+    StravaClient,
+    StravaError,
+    authorization_url,
+    encrypt_token,
+    make_oauth_state,
+    scopes_are_sufficient,
+)
+from app.services.sync import sync_strava
 from app.services.timezone import seconds_to_human, to_local
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 templates.env.filters["seconds"] = seconds_to_human
-templates.env.filters["localdt"] = lambda value: to_local(value).strftime("%d/%m/%Y %H:%M") if value else "-"
+templates.env.filters["localdt"] = lambda value: (
+    to_local(value).strftime("%d/%m/%Y %H:%M") if value else "-"
+)
 
 
 def render(
@@ -51,7 +78,9 @@ def login_page(request: Request) -> HTMLResponse:
 @router.post("/login")
 def login(request: Request, password: str = Form(...), db: Session = Depends(get_db)) -> Response:
     if not password_matches(password):
-        return render(request, "login.html", {"request": request, "error": "Senha invalida"}, status_code=401)
+        return render(
+            request, "login.html", {"request": request, "error": "Senha invalida"}, status_code=401
+        )
     user = db.scalar(select(User).limit(1))
     if not user:
         user = User(name="Humberto", timezone=get_settings().app_timezone)
@@ -76,39 +105,70 @@ def home() -> RedirectResponse:
 
 
 @router.get("/hoje", response_class=HTMLResponse)
-def today_page(request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)) -> HTMLResponse:
+def today_page(
+    request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> HTMLResponse:
     data = reports.dashboard(db, user.id, date.today())
     return render(request, "dashboard.html", {"request": request, "user": user, "data": data})
 
 
 @router.get("/atividades", response_class=HTMLResponse)
-def activities_page(request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)) -> HTMLResponse:
-    activities = db.scalars(select(Activity).where(Activity.user_id == user.id).order_by(Activity.started_at.desc())).all()
-    return render(request, "activities.html", {"request": request, "user": user, "activities": activities})
+def activities_page(
+    request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> HTMLResponse:
+    activities = db.scalars(
+        select(Activity).where(Activity.user_id == user.id).order_by(Activity.started_at.desc())
+    ).all()
+    return render(
+        request, "activities.html", {"request": request, "user": user, "activities": activities}
+    )
 
 
 @router.get("/atividades/{activity_id}", response_class=HTMLResponse)
-def activity_detail(activity_id: int, request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)) -> HTMLResponse:
+def activity_detail(
+    activity_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> HTMLResponse:
     activity = db.get(Activity, activity_id)
     if not activity or activity.user_id != user.id:
-        return render(request, "not_found.html", {"request": request, "user": user}, status_code=404)
-    return render(request, "activity_detail.html", {"request": request, "user": user, "activity": activity})
+        return render(
+            request, "not_found.html", {"request": request, "user": user}, status_code=404
+        )
+    return render(
+        request, "activity_detail.html", {"request": request, "user": user, "activity": activity}
+    )
 
 
 @router.get("/sono", response_class=HTMLResponse)
-def sleep_page(request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)) -> HTMLResponse:
-    sleeps = db.scalars(select(Sleep).where(Sleep.user_id == user.id).order_by(Sleep.day.desc())).all()
+def sleep_page(
+    request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> HTMLResponse:
+    sleeps = db.scalars(
+        select(Sleep).where(Sleep.user_id == user.id).order_by(Sleep.day.desc())
+    ).all()
     return render(request, "sleep.html", {"request": request, "user": user, "sleeps": sleeps})
 
 
 @router.get("/recuperacao", response_class=HTMLResponse)
-def recovery_page(request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)) -> HTMLResponse:
-    recoveries = db.scalars(select(DailyRecovery).where(DailyRecovery.user_id == user.id).order_by(DailyRecovery.day.desc())).all()
-    return render(request, "recovery.html", {"request": request, "user": user, "recoveries": recoveries})
+def recovery_page(
+    request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> HTMLResponse:
+    recoveries = db.scalars(
+        select(DailyRecovery)
+        .where(DailyRecovery.user_id == user.id)
+        .order_by(DailyRecovery.day.desc())
+    ).all()
+    return render(
+        request, "recovery.html", {"request": request, "user": user, "recoveries": recoveries}
+    )
 
 
 @router.get("/checkin", response_class=HTMLResponse)
-def checkin_page(request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)) -> HTMLResponse:
+def checkin_page(
+    request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> HTMLResponse:
     checkin = reports.latest_checkin(db, user.id, date.today())
     return render(request, "checkin.html", {"request": request, "user": user, "checkin": checkin})
 
@@ -130,7 +190,9 @@ def save_checkin(
     red_flags: str = Form(""),
     notes: str = Form(""),
 ) -> RedirectResponse:
-    checkin = reports.latest_checkin(db, user.id, date.today()) or SubjectiveCheckin(user_id=user.id, day=date.today())
+    checkin = reports.latest_checkin(db, user.id, date.today()) or SubjectiveCheckin(
+        user_id=user.id, day=date.today()
+    )
     checkin.perceived_effort = perceived_effort
     checkin.sleep_quality = sleep_quality
     checkin.energy = energy
@@ -149,15 +211,25 @@ def save_checkin(
 
 
 @router.get("/relatorio-semanal", response_class=HTMLResponse)
-def weekly_page(request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)) -> HTMLResponse:
+def weekly_page(
+    request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> HTMLResponse:
     report = reports.weekly_report(db, user.id, date.today())
     daily = reports.daily_report_markdown(db, user.id, date.today())
-    return render(request, "weekly_report.html", {"request": request, "user": user, "report": report, "daily": daily})
+    return render(
+        request,
+        "weekly_report.html",
+        {"request": request, "user": user, "report": report, "daily": daily},
+    )
 
 
 @router.get("/importacoes", response_class=HTMLResponse)
-def imports_page(request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)) -> HTMLResponse:
-    jobs = db.scalars(select(ImportJob).where(ImportJob.user_id == user.id).order_by(ImportJob.created_at.desc())).all()
+def imports_page(
+    request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> HTMLResponse:
+    jobs = db.scalars(
+        select(ImportJob).where(ImportJob.user_id == user.id).order_by(ImportJob.created_at.desc())
+    ).all()
     return render(request, "imports.html", {"request": request, "user": user, "jobs": jobs})
 
 
@@ -176,12 +248,130 @@ async def upload_import(
 
 @router.get("/integracoes", response_class=HTMLResponse)
 def integrations_page(request: Request, user: User = Depends(current_user)) -> HTMLResponse:
-    return render(request, "integrations.html", {"request": request, "user": user})
+    settings = get_settings()
+    return render(
+        request,
+        "integrations.html",
+        {
+            "request": request,
+            "user": user,
+            "strava_status": "desativado"
+            if not settings.strava_enabled
+            else "nao configurado"
+            if not settings.strava_configured
+            else "pronto para conectar",
+            "message": request.query_params.get("message"),
+        },
+    )
+
+
+@router.get("/integrations/strava/connect")
+def strava_connect(user: User = Depends(current_user)) -> Response:
+    state = make_oauth_state()
+    try:
+        response = RedirectResponse(authorization_url(state), status_code=303)
+    except RuntimeError:
+        return RedirectResponse("/integracoes?message=Strava+nao+configurado", status_code=303)
+    response.set_cookie(
+        "hp_strava_state",
+        make_oauth_state_cookie(state),
+        httponly=True,
+        samesite="lax",
+        max_age=600,
+    )
+    return response
+
+
+@router.get("/integrations/strava/callback")
+def strava_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> Response:
+    if error:
+        return RedirectResponse("/integracoes?message=Autorizacao+Strava+recusada", status_code=303)
+    if (
+        not code
+        or not state
+        or not verify_oauth_state_cookie(request.cookies.get("hp_strava_state"), state)
+    ):
+        return RedirectResponse("/integracoes?message=Retorno+OAuth+invalido", status_code=303)
+    try:
+        tokens = StravaClient().exchange_code(code)
+        if not scopes_are_sufficient(tokens.get("scope")):
+            raise StravaError("Escopo activity:read nao concedido.")
+        source = db.scalar(select(DataSource).where(DataSource.name == "strava")) or DataSource(
+            name="strava", kind="oauth"
+        )
+        db.add(source)
+        db.flush()
+        credential = db.scalar(
+            select(OAuthCredential).where(
+                OAuthCredential.user_id == user.id, OAuthCredential.data_source_id == source.id
+            )
+        )
+        if credential is None:
+            credential = OAuthCredential(
+                user_id=user.id, data_source_id=source.id, encrypted_access_token=""
+            )
+        credential.encrypted_access_token = encrypt_token(tokens["access_token"])
+        credential.encrypted_refresh_token = encrypt_token(tokens["refresh_token"])
+        credential.scopes = tokens.get("scope")
+        db.add(credential)
+        db.commit()
+    except (StravaError, KeyError):
+        return RedirectResponse("/integracoes?message=Falha+ao+conectar+Strava", status_code=303)
+    response = RedirectResponse("/integracoes?message=Strava+conectado", status_code=303)
+    response.delete_cookie("hp_strava_state")
+    return response
+
+
+@router.post("/integrations/strava/disconnect")
+def strava_disconnect(
+    db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> RedirectResponse:
+    source = db.scalar(select(DataSource).where(DataSource.name == "strava"))
+    if source:
+        credentials = db.scalars(
+            select(OAuthCredential).where(
+                OAuthCredential.user_id == user.id,
+                OAuthCredential.data_source_id == source.id,
+            )
+        ).all()
+        for credential in credentials:
+            db.delete(credential)
+        db.add(
+            SyncLog(
+                data_source_id=source.id,
+                action="strava_disconnect",
+                status="completed",
+                message="Credenciais locais removidas.",
+            )
+        )
+        db.commit()
+    return RedirectResponse("/integracoes?message=Strava+desconectado", status_code=303)
+
+
+@router.post("/integrations/strava/sync")
+def strava_sync(
+    db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> RedirectResponse:
+    try:
+        stats = sync_strava(db, user.id)
+        message = f"Sincronizacao concluida: {stats['created']} novas atividades."
+    except StravaError:
+        message = "Sincronizacao Strava indisponivel. Verifique a conexao."
+    return RedirectResponse(f"/integracoes?message={message.replace(' ', '+')}", status_code=303)
 
 
 @router.get("/configuracoes", response_class=HTMLResponse)
 def settings_page(request: Request, user: User = Depends(current_user)) -> HTMLResponse:
-    return render(request, "settings.html", {"request": request, "user": user, "settings": get_settings()})
+    return render(
+        request, "settings.html", {"request": request, "user": user, "settings": get_settings()}
+    )
 
 
 @router.get("/export/json")
@@ -190,12 +380,18 @@ def export_json(db: Session = Depends(get_db), user: User = Depends(current_user
 
 
 @router.get("/export/markdown")
-def export_markdown(db: Session = Depends(get_db), user: User = Depends(current_user)) -> PlainTextResponse:
-    return PlainTextResponse(reports.daily_report_markdown(db, user.id, date.today()), media_type="text/markdown")
+def export_markdown(
+    db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> PlainTextResponse:
+    return PlainTextResponse(
+        reports.daily_report_markdown(db, user.id, date.today()), media_type="text/markdown"
+    )
 
 
 @router.post("/configuracoes/excluir-dados")
-def delete_data(db: Session = Depends(get_db), user: User = Depends(current_user)) -> RedirectResponse:
+def delete_data(
+    db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> RedirectResponse:
     # MVP single-user cleanup. Keeps the user account so local auth remains simple.
     for model in [Activity, DailyRecovery, Sleep, SubjectiveCheckin, ImportJob]:
         for row in db.scalars(select(model).where(model.user_id == user.id)).all():
