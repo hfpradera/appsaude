@@ -249,6 +249,13 @@ async def upload_import(
 @router.get("/integracoes", response_class=HTMLResponse)
 def integrations_page(request: Request, user: User = Depends(current_user)) -> HTMLResponse:
     settings = get_settings()
+    strava_missing = []
+    if not settings.strava_client_id:
+        strava_missing.append("Client ID")
+    if not settings.strava_client_secret:
+        strava_missing.append("Client Secret")
+    if not settings.token_encryption_key:
+        strava_missing.append("TOKEN_ENCRYPTION_KEY")
     return render(
         request,
         "integrations.html",
@@ -260,6 +267,9 @@ def integrations_page(request: Request, user: User = Depends(current_user)) -> H
             else "nao configurado"
             if not settings.strava_configured
             else "pronto para conectar",
+            "strava_configured": settings.strava_configured,
+            "strava_missing": strava_missing,
+            "strava_redirect_uri": settings.effective_strava_redirect_uri,
             "message": request.query_params.get("message"),
         },
     )

@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,6 +10,7 @@ class Settings(BaseSettings):
 
     app_name: str = "Humberto Performance"
     app_env: str = "development"
+    app_public_base_url: str = "http://127.0.0.1:8000"
     app_secret_key: str = "dev-only-change-me"
     app_local_password: str = "humberto-dev"
     database_url: str = "sqlite:///./data/humberto_performance.db"
@@ -17,7 +19,7 @@ class Settings(BaseSettings):
     hide_location: bool = True
     strava_client_id: str = ""
     strava_client_secret: str = ""
-    strava_redirect_uri: str = "http://127.0.0.1:8000/integrations/strava/callback"
+    strava_redirect_uri: str = ""
     strava_enabled: bool = False
     token_encryption_key: str = ""
     strava_sync_overlap_minutes: int = 60
@@ -27,9 +29,18 @@ class Settings(BaseSettings):
     upload_dir: Path = Path("./data/uploads")
     export_dir: Path = Path("./data/exports")
 
+    @model_validator(mode="after")
+    def normalize_urls(self) -> "Settings":
+        self.app_public_base_url = self.app_public_base_url.rstrip("/")
+        return self
+
     @property
     def strava_configured(self) -> bool:
         return self.strava_enabled and bool(self.strava_client_id and self.strava_client_secret and self.token_encryption_key)
+
+    @property
+    def effective_strava_redirect_uri(self) -> str:
+        return self.strava_redirect_uri or f"{self.app_public_base_url}/integrations/strava/callback"
 
 
 @lru_cache

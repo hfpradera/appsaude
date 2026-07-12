@@ -63,7 +63,7 @@ def authorization_url(state: str) -> str:
     settings = get_settings()
     if not settings.strava_configured:
         raise RuntimeError("Strava nao configurado.")
-    query = urlencode({"client_id": settings.strava_client_id, "redirect_uri": str(settings.strava_redirect_uri), "response_type": "code", "approval_prompt": "auto", "scope": "activity:read", "state": state})
+    query = urlencode({"client_id": settings.strava_client_id, "redirect_uri": settings.effective_strava_redirect_uri, "response_type": "code", "approval_prompt": "auto", "scope": "activity:read", "state": state})
     return f"{AUTHORIZE_URL}?{query}"
 
 
