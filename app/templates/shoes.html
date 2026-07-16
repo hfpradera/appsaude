@@ -51,6 +51,7 @@
         <p class="muted">Km acumulado soma apenas atividades que vieram com distancia.</p>
       </div>
     </div>
+    <div id="shoe-hero"></div>
     <div id="shoe-list" class="shoe-grid"></div>
   </article>
 </section>
@@ -70,6 +71,42 @@ function shoeProgress(shoe) {
   if (!max) return 0;
   return Math.min(100, Math.round((Number(shoe.total_distance_km || 0) / max) * 100));
 }
+function shoePhotoFrame(shoe, large) {
+  const cls = large ? "shoe-photo-frame shoe-photo-frame-lg" : "shoe-photo-frame";
+  if (shoe.photo_url) {
+    return `<div class="${cls}"><img src="${esc(shoe.photo_url)}?v=${Date.now()}" alt="Foto do tenis ${esc(shoe.name)}"></div>`;
+  }
+  return `<div class="${cls} shoe-photo-placeholder" aria-hidden="true">&#128095;</div>`;
+}
+function shoePhotoActions(shoe) {
+  return `<div class="shoe-photo-actions">
+    <label class="photo-upload-btn" for="photo-input-${shoe.id}">${shoe.photo_url ? "Trocar foto" : "Adicionar foto"}</label>
+    <input type="file" id="photo-input-${shoe.id}" class="photo-input" data-shoe-id="${shoe.id}" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+    ${shoe.photo_url ? `<button type="button" class="link-button photo-remove-btn" data-shoe-id="${shoe.id}">Remover foto</button>` : ""}
+  </div>`;
+}
+function renderHero(shoes) {
+  const active = shoes.filter(shoe => shoe.status === "active");
+  if (!active.length) return "";
+  const withUse = active.filter(shoe => shoe.last_use);
+  const pool = withUse.length ? withUse : active;
+  const featured = pool.slice().sort((a, b) => new Date(b.last_use || 0) - new Date(a.last_use || 0))[0];
+  const total = Number(featured.total_distance_km || 0).toFixed(1);
+  return `<article class="panel shoe-hero">
+    ${shoePhotoFrame(featured, true)}
+    <div class="shoe-hero-info">
+      <p class="eyebrow">Tenis em uso</p>
+      <h2>${esc(featured.name)}</h2>
+      <p class="muted">${esc([featured.brand, featured.model, featured.color].filter(Boolean).join(" · ") || "Dados basicos pendentes")}</p>
+      <div class="shoe-hero-stats">
+        <span class="status-pill ok">ativo</span>
+        <strong>${total} km rodados</strong>
+        <span class="muted">Ultimo uso: ${esc(fmtDate(featured.last_use))}</span>
+      </div>
+      ${shoePhotoActions(featured)}
+    </div>
+  </article>`;
+}
 function renderShoe(shoe) {
   const progress = shoeProgress(shoe);
   const unknown = Number(shoe.unknown_distance_activity_count || 0);
@@ -78,9 +115,11 @@ function renderShoe(shoe) {
   const recent = (shoe.recent_usages || []).slice(0, 3).map(item => `<li><span>${esc(item.type || "atividade")}</span><strong>${item.distance_km ? `${esc(item.distance_km)} km` : "sem distancia"}</strong></li>`).join("");
   return `<article class="shoe-card friendly-shoe-card">
     <div class="shoe-card-head">
-      <div>
+      ${shoePhotoFrame(shoe, false)}
+      <div class="shoe-card-head-info">
         <strong>${esc(shoe.name)}</strong>
         <span>${esc([shoe.brand, shoe.model, shoe.color].filter(Boolean).join(" | ") || "Dados basicos pendentes")}</span>
+        ${shoePhotoActions(shoe)}
       </div>
       <span class="status-pill ${shoe.status === "active" ? "ok" : ""}">${shoe.status === "active" ? "ativo" : esc(shoe.status)}</span>
     </div>
@@ -98,11 +137,41 @@ async function reloadShoes() {
   const response = await fetch("/api/shoes");
   const data = await response.json();
   const shoes = data.shoes || [];
+  document.getElementById("shoe-hero").innerHTML = renderHero(shoes);
   document.getElementById("shoe-list").innerHTML = shoes.map(renderShoe).join("") || `<p class="muted">Nenhum tenis cadastrado.</p>`;
   document.getElementById("active-shoes").textContent = shoes.filter(shoe => shoe.status === "active").length;
   document.getElementById("known-km").textContent = `${shoes.reduce((sum, shoe) => sum + Number(shoe.total_distance_km || 0), 0).toFixed(1)} km`;
   document.getElementById("usage-count").textContent = shoes.reduce((sum, shoe) => sum + Number(shoe.usage_count || 0), 0);
 }
+async function uploadShoePhoto(shoeId, file) {
+  const body = new FormData();
+  body.append("file", file);
+  const response = await fetch(`/api/shoes/${shoeId}/photo`, { method: "POST", body });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    alert(detail && detail.detail ? detail.detail : "Nao foi possivel enviar a foto.");
+    return;
+  }
+  await reloadShoes();
+}
+async function removeShoePhoto(shoeId) {
+  await fetch(`/api/shoes/${shoeId}/photo`, { method: "DELETE" });
+  await reloadShoes();
+}
+function bindPhotoEvents(container) {
+  container.addEventListener("change", event => {
+    const input = event.target.closest(".photo-input");
+    if (!input || !input.files[0]) return;
+    uploadShoePhoto(input.dataset.shoeId, input.files[0]);
+  });
+  container.addEventListener("click", event => {
+    const button = event.target.closest(".photo-remove-btn");
+    if (!button) return;
+    removeShoePhoto(button.dataset.shoeId);
+  });
+}
+bindPhotoEvents(document.getElementById("shoe-hero"));
+bindPhotoEvents(document.getElementById("shoe-list"));
 document.getElementById("shoe-form").addEventListener("submit", async event => {
   event.preventDefault();
   const payload = Object.fromEntries(new FormData(event.target).entries());

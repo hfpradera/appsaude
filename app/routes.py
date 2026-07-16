@@ -4,8 +4,14 @@ from datetime import UTC, date, datetime, timedelta
 from threading import Thread
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, StreamingResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,6 +26,7 @@ from app.models import (
     ImportJob,
     IntegrationState,
     OAuthCredential,
+    RunningShoe,
     Sleep,
     SubjectiveCheckin,
     SyncLog,
@@ -75,6 +82,7 @@ from app.services.dashboard_api import (
     trend_payload,
 )
 from app.services.importers import import_file, save_upload
+from app.services.shoe_photos import delete_shoe_photo_file, save_shoe_photo
 from app.services.strava import (
     StravaClient,
     StravaError,
@@ -1268,6 +1276,55 @@ async def api_associate_shoe(
 ) -> dict[str, object]:
     payload = await request.json()
     return associate_shoe_with_activity(db, user.id, shoe_id, int(payload["activity_id"])).data
+
+
+def _owned_shoe(db: Session, user_id: int, shoe_id: int) -> RunningShoe:
+    shoe = db.get(RunningShoe, shoe_id)
+    if not shoe or shoe.user_id != user_id:
+        raise HTTPException(404, "Tenis nao encontrado.")
+    return shoe
+
+
+@router.post("/api/shoes/{shoe_id}/photo")
+async def api_upload_shoe_photo(
+    shoe_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+    file: UploadFile = File(...),
+) -> dict[str, object]:
+    shoe = _owned_shoe(db, user.id, shoe_id)
+    content = await file.read()
+    try:
+        destination = save_shoe_photo(
+            get_settings().upload_dir, shoe.id, file.filename or "foto", file.content_type, content
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    delete_shoe_photo_file(shoe.photo_path)
+    shoe.photo_path = str(destination)
+    db.commit()
+    return get_shoe_details(db, user.id, shoe_id).data
+
+
+@router.delete("/api/shoes/{shoe_id}/photo")
+def api_delete_shoe_photo(
+    shoe_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> dict[str, object]:
+    shoe = _owned_shoe(db, user.id, shoe_id)
+    delete_shoe_photo_file(shoe.photo_path)
+    shoe.photo_path = None
+    db.commit()
+    return get_shoe_details(db, user.id, shoe_id).data
+
+
+@router.get("/api/shoes/{shoe_id}/photo")
+def api_get_shoe_photo(
+    shoe_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> FileResponse:
+    shoe = _owned_shoe(db, user.id, shoe_id)
+    if not shoe.photo_path:
+        raise HTTPException(404, "Tenis nao tem foto.")
+    return FileResponse(shoe.photo_path)
 
 
 def _mask_database_url(url: str) -> str:

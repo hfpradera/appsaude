@@ -913,6 +913,7 @@ def _shoe_payload(db: Session, shoe: RunningShoe) -> dict[str, object]:
         "remaining_max_km": remaining_max,
         "estimate_status": "configurada" if shoe.expected_min_km or shoe.expected_max_km else "Estimativa ainda nao configurada.",
         "condition_notes": shoe.condition_notes,
+        "photo_url": f"/api/shoes/{shoe.id}/photo" if shoe.photo_path else None,
         "recent_usages": recent_usages,
     }
 

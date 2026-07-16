@@ -428,6 +428,7 @@ class RunningShoe(Base):
     expected_max_km: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(40), default="active")
     condition_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    photo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
     retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

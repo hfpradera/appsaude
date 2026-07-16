@@ -20,7 +20,7 @@ from app.db import Base
 BASE_REVISION = "0001_initial"
 STRAVA_REVISION = "0002_strava_integration"
 LINKS_REVISION = "0003_activity_source_links"
-HEAD_REVISION = "0006_ai_responses_runtime"
+HEAD_REVISION = "0007_running_shoe_photo"
 
 Strategy = Literal[
     "current",
