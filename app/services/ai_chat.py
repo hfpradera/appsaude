@@ -234,6 +234,20 @@ def _openai_response(
                     "output": json.dumps(result, ensure_ascii=False, default=str),
                 }
             )
+    if not final_text and tool_cards:
+        try:
+            response = openai_client.create(
+                model=settings.openai_model,
+                instructions=instructions,
+                input=history,
+                tools=[],
+                max_output_tokens=settings.openai_max_output_tokens,
+                previous_response_id=previous_response_id,
+            )
+            _merge_usage(usage, getattr(response, "usage", None))
+            final_text = _response_text(response)
+        except Exception:
+            logger.exception("Chamada final sem ferramentas falhou.")
     if not final_text:
         final_text = _tool_fallback_response(tool_cards)
     usage["tool_call_count"] = len(tool_cards)

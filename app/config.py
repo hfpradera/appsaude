@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5-mini"
     openai_chat_enabled: bool = False
     openai_timeout_seconds: int = 30
-    openai_max_output_tokens: int = 800
+    openai_max_output_tokens: int = 2500
     openai_max_tool_rounds: int = 4
     openai_daily_request_limit: int = 50
     openai_monthly_budget_brl: float | None = None
