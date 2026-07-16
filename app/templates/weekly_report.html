@@ -10,7 +10,7 @@
   <article><span>Recovery médio</span><strong>{{ report.avg_recovery or "-" }}</strong></article>
 </section>
 <section class="two-col">
-  <article class="panel"><h2>Alertas</h2>{% for alert in report.alerts %}<p>{{ alert }}</p>{% endfor %}</article>
+  <article class="panel"><h2>Alertas</h2>{% if report.alerts %}{% for alert in report.alerts %}<p>{{ alert }}</p>{% endfor %}{% else %}<p class="muted">Sem alertas nesta semana.</p>{% endif %}</article>
   <article class="panel"><h2>Semana seguinte</h2><p>{{ report.recommendation }}</p></article>
 </section>
 <section class="panel"><h2>Relatório diário em Markdown</h2><pre>{{ daily }}</pre></section>

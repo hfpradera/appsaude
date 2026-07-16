@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="page-title"><div><p class="eyebrow">Histórico</p><h1>Atividades</h1></div></section>
-<section class="panel">
+{% if activities %}
+<section class="table-wrap">
   <table>
     <thead><tr><th>Data</th><th>Tipo</th><th>Duração</th><th>Distância</th><th>FC</th><th>Status</th></tr></thead>
     <tbody>
@@ -18,4 +19,13 @@
     </tbody>
   </table>
 </section>
+{% else %}
+{% import "_icons.html" as icons %}
+<div class="empty">
+  {{ icons.icon("activity") }}
+  <h3>Nenhuma atividade ainda</h3>
+  <p>Assim que você importar treinos do Strava, Garmin ou um arquivo CSV/FIT, eles aparecem aqui.</p>
+  <a href="/importacoes" class="button">Importar dados</a>
+</div>
+{% endif %}
 {% endblock %}

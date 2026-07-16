@@ -4,12 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Entrar - Humberto Performance</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,500&display=swap">
   <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body class="login-body">
   <main class="login-panel">
-    <h1>Humberto Performance</h1>
-    <p>Entre com sua senha local.</p>
+    <h1><span style="font-family:var(--font-display);font-weight:600;">Humberto</span> <em style="font-family:var(--font-serif);font-style:italic;font-weight:500;color:var(--accent);">Performance</em></h1>
+    <p class="muted">Entre com sua senha local.</p>
     {% if error %}<p class="alert">{{ error }}</p>{% endif %}
     <form method="post" action="/login" class="stack">
       <label>Senha <input type="password" name="password" autofocus required></label>

@@ -6,11 +6,17 @@
   <label>Arquivo CSV, JSON ou FIT<input type="file" name="file" required></label>
   <button type="submit">Importar</button>
 </form>
-<section class="panel">
+{% if jobs %}
+<section class="table-wrap">
 <table><thead><tr><th>Arquivo</th><th>Fonte</th><th>Status</th><th>Registros</th><th>Erro</th></tr></thead><tbody>
 {% for job in jobs %}
 <tr><td>{{ job.file_name }}</td><td>{{ job.source_name }}</td><td>{{ job.status }}</td><td>{{ job.records_imported }}</td><td>{{ job.error_message or "" }}</td></tr>
 {% endfor %}
 </tbody></table>
 </section>
+{% else %}
+<div class="empty">
+  <p class="muted">Nenhuma importação feita ainda.</p>
+</div>
+{% endif %}
 {% endblock %}

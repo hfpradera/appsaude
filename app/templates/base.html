@@ -4,26 +4,30 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title or "Humberto Performance" }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,500&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/static/css/app.css">
 </head>
+{% import "_icons.html" as icons %}
+{% set path = request.url.path %}
 <body>
   <header class="topbar">
-    <a class="brand" href="/hoje">Humberto Performance</a>
+    <a class="brand" href="/hoje">Humberto <em>Performance</em></a>
     <nav>
-      <a href="/hoje">Hoje</a>
-      <a href="/atividades">Atividades</a>
-      <a href="/sono">Sono</a>
-      <a href="/recuperacao">Recuperação</a>
-      <a href="/checkin">Check-in</a>
-      <a href="/relatorio-semanal">Relatório</a>
-      <a href="/analise-ia">Analise IA</a>
-      <a href="/assistente">Assistente IA</a>
-      <a href="/tenis">Tenis</a>
-      <a href="/importacoes">Importações</a>
-      <a href="/integracoes">Integrações</a>
-      <a href="/configuracoes">Configurações</a>
+      <a href="/hoje" title="Hoje" class="{{ 'active' if path == '/hoje' else '' }}">{{ icons.icon("home") }}</a>
+      <a href="/atividades" title="Atividades" class="{{ 'active' if path.startswith('/atividades') else '' }}">{{ icons.icon("activity") }}</a>
+      <a href="/sono" title="Sono" class="{{ 'active' if path == '/sono' else '' }}">{{ icons.icon("moon") }}</a>
+      <a href="/recuperacao" title="Recuperação" class="{{ 'active' if path == '/recuperacao' else '' }}">{{ icons.icon("heart") }}</a>
+      <a href="/checkin" title="Check-in" class="{{ 'active' if path == '/checkin' else '' }}">{{ icons.icon("clipboard") }}</a>
+      <a href="/relatorio-semanal" title="Relatório" class="{{ 'active' if path == '/relatorio-semanal' else '' }}">{{ icons.icon("bar-chart") }}</a>
+      <a href="/analise-ia" title="Análise IA" class="{{ 'active' if path == '/analise-ia' else '' }}">{{ icons.icon("sparkles") }}</a>
+      <a href="/assistente" title="Assistente IA" class="{{ 'active' if path == '/assistente' else '' }}">{{ icons.icon("chat") }}</a>
+      <a href="/tenis" title="Tênis" class="{{ 'active' if path == '/tenis' else '' }}">{{ icons.icon("shoe") }}</a>
+      <a href="/importacoes" title="Importações" class="{{ 'active' if path == '/importacoes' else '' }}">{{ icons.icon("upload") }}</a>
+      <a href="/integracoes" title="Integrações" class="{{ 'active' if path == '/integracoes' else '' }}">{{ icons.icon("infinity") }}</a>
+      <a href="/configuracoes" title="Configurações" class="{{ 'active' if path == '/configuracoes' else '' }}">{{ icons.icon("sun") }}</a>
     </nav>
-    <form method="post" action="/logout"><button class="icon-button" title="Sair">⏻</button></form>
+    <form method="post" action="/logout"><button class="icon-button" title="Sair">{{ icons.icon("power") }}</button></form>
   </header>
   <main class="shell">
     {% block content %}{% endblock %}

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="page-title"><div><p class="eyebrow">Check-in</p><h1>Registro de hoje</h1></div></section>
+<section class="page-title"><div><p class="eyebrow">Check-in</p><h1>Como você está hoje?</h1><p class="muted">Leva menos de um minuto. Suas respostas ajudam a entender melhor os dias em que o corpo pede mais cuidado.</p></div></section>
 <form method="post" class="panel form-grid">
   {% for name, label in [("perceived_effort","Esforço percebido"),("sleep_quality","Qualidade do sono"),("energy","Energia"),("muscle_soreness","Dor muscular")] %}
   <label>{{ label }}<input type="number" min="0" max="10" name="{{ name }}" value="{{ checkin|attr(name) if checkin else 0 }}"></label>
