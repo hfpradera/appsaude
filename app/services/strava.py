@@ -1,5 +1,6 @@
 import secrets
 import time
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from urllib.parse import urlencode
 
@@ -73,7 +74,8 @@ def scopes_are_sufficient(scope: str | None) -> bool:
 
 class StravaClient:
     def __init__(self, client: httpx.Client | None = None) -> None:
-        self.client = client or httpx.Client(timeout=httpx.Timeout(15.0))
+        timeout = float(get_settings().strava_http_timeout_seconds)
+        self.client = client or httpx.Client(timeout=httpx.Timeout(timeout))
 
     def exchange_code(self, code: str) -> dict:
         return self._request("POST", TOKEN_URL, data=self._credentials({"code": code, "grant_type": "authorization_code"}))
@@ -84,17 +86,17 @@ class StravaClient:
     def athlete(self, access_token: str) -> dict:
         return self._request("GET", f"{API_URL}/athlete", token=access_token)
 
-    def activities(self, access_token: str, after: datetime | None = None) -> list[dict]:
-        items: list[dict] = []
+    def activities(self, access_token: str, after: datetime | None = None) -> Iterator[dict]:
         page = 1
+        per_page = get_settings().strava_sync_per_page
         while True:
-            params = {"page": page, "per_page": 100}
+            params = {"page": page, "per_page": per_page}
             if after:
                 params["after"] = int(after.astimezone(UTC).timestamp())
             batch = self._request("GET", f"{API_URL}/athlete/activities", token=access_token, params=params)
-            items.extend(batch)
-            if len(batch) < 100:
-                return items
+            yield from batch
+            if len(batch) < per_page:
+                return
             page += 1
 
     def activity_streams(self, access_token: str, activity_id: str | int) -> dict:

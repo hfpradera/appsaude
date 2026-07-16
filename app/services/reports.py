@@ -6,8 +6,10 @@ from statistics import mean, pstdev
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Activity, DailyRecovery, Sleep, SubjectiveCheckin
+from app.models import Activity, DailyRecovery, DataSource, Sleep, SubjectiveCheckin
 from app.services.timezone import seconds_to_human
+
+EXCLUDED_TRAINING_ACTIVITY_SOURCES = {"demo", "whoop"}
 
 
 @dataclass(frozen=True)
@@ -78,11 +80,15 @@ def dashboard(db: Session, user_id: int, day: date) -> dict[str, object]:
     sleep = latest_sleep(db, user_id, day)
     checkin = latest_checkin(db, user_id, day)
     recent_activity = db.scalar(
-        select(Activity)
-        .where(Activity.user_id == user_id)
+        _training_activity_query(user_id)
         .order_by(Activity.started_at.desc())
         .limit(1)
     )
+    recent_activities = db.scalars(
+        _training_activity_query(user_id)
+        .order_by(Activity.started_at.desc())
+        .limit(8)
+    ).all()
     load_7d = activity_load_seconds(db, user_id, day - timedelta(days=6), day)
     load_28d = activity_load_seconds(db, user_id, day - timedelta(days=27), day)
     classification = classify_day(recovery, sleep, checkin, load_7d, load_28d)
@@ -95,6 +101,7 @@ def dashboard(db: Session, user_id: int, day: date) -> dict[str, object]:
         "sleep": sleep,
         "checkin": checkin,
         "recent_activity": recent_activity,
+        "recent_activities": recent_activities,
         "load_7d_seconds": load_7d,
         "load_28d_seconds": load_28d,
         "weekly_distance_km": round(week_distance / 1000, 1),
@@ -102,7 +109,101 @@ def dashboard(db: Session, user_id: int, day: date) -> dict[str, object]:
         "four_week_avg": seconds_to_human(previous_4w_avg),
         "classification": classification,
         "data_quality": classification.data_quality,
+        "trend": executive_trend(db, user_id, day),
+        "timeline": consolidated_timeline(db, user_id, day),
     }
+
+
+def executive_trend(db: Session, user_id: int, end_day: date, days: int = 14) -> list[dict[str, object]]:
+    start_day = end_day - timedelta(days=days - 1)
+    recoveries = {
+        item.day: item
+        for item in db.scalars(
+            select(DailyRecovery).where(
+                DailyRecovery.user_id == user_id,
+                DailyRecovery.day >= start_day,
+                DailyRecovery.day <= end_day,
+            )
+        )
+    }
+    sleeps = {
+        item.day: item
+        for item in db.scalars(
+            select(Sleep).where(
+                Sleep.user_id == user_id,
+                Sleep.day >= start_day,
+                Sleep.day <= end_day,
+            )
+        )
+    }
+    activities = activities_between(db, user_id, start_day, end_day)
+    by_day: dict[date, list[Activity]] = {}
+    for activity in activities:
+        by_day.setdefault(activity.started_at.date(), []).append(activity)
+    rows: list[dict[str, object]] = []
+    for offset in range(days):
+        current = start_day + timedelta(days=offset)
+        recovery = recoveries.get(current)
+        sleep = sleeps.get(current)
+        day_activities = by_day.get(current, [])
+        rows.append(
+            {
+                "day": current,
+                "recovery": recovery.recovery_score if recovery else None,
+                "hrv": recovery.hrv_ms if recovery else None,
+                "resting_hr": recovery.resting_hr if recovery else None,
+                "strain": recovery.daily_strain if recovery else _sum_optional([a.strain for a in day_activities]),
+                "sleep_hours": round((sleep.sleep_duration_seconds or 0) / 3600, 1) if sleep and sleep.sleep_duration_seconds else None,
+                "activity_minutes": round(sum(a.total_duration_seconds or 0 for a in day_activities) / 60),
+                "activity_count": len(day_activities),
+            }
+        )
+    return rows
+
+
+def consolidated_timeline(db: Session, user_id: int, end_day: date, days: int = 10) -> list[dict[str, object]]:
+    start_day = end_day - timedelta(days=days - 1)
+    rows: list[dict[str, object]] = []
+    for recovery in db.scalars(
+        select(DailyRecovery)
+        .where(
+            DailyRecovery.user_id == user_id,
+            DailyRecovery.day >= start_day,
+            DailyRecovery.day <= end_day,
+        )
+        .order_by(DailyRecovery.day.desc())
+    ):
+        rows.append(
+            {
+                "when": recovery.day,
+                "kind": "Recovery",
+                "title": f"Recovery {recovery.recovery_score or '-'}%",
+                "detail": f"HRV {recovery.hrv_ms or '-'} ms ?? Repouso {recovery.resting_hr or '-'} bpm",
+            }
+        )
+    for sleep in db.scalars(
+        select(Sleep)
+        .where(Sleep.user_id == user_id, Sleep.day >= start_day, Sleep.day <= end_day)
+        .order_by(Sleep.day.desc())
+    ):
+        rows.append(
+            {
+                "when": sleep.day,
+                "kind": "Sono",
+                "title": seconds_to_human(sleep.sleep_duration_seconds),
+                "detail": f"Eficiencia {sleep.efficiency_percent or '-'}%",
+            }
+        )
+    for activity in activities_between(db, user_id, start_day, end_day)[:12]:
+        rows.append(
+            {
+                "when": activity.started_at,
+                "kind": "Atividade",
+                "title": activity.activity_type.title(),
+                "detail": _activity_text(activity),
+            }
+        )
+    return sorted(rows, key=lambda item: str(item["when"]), reverse=True)[:18]
 
 
 def daily_report_markdown(db: Session, user_id: int, day: date) -> str:
@@ -215,11 +316,7 @@ def latest_checkin(db: Session, user_id: int, day: date) -> SubjectiveCheckin | 
 def activity_load_seconds(db: Session, user_id: int, start_day: date, end_day: date) -> int:
     return int(
         db.scalar(
-            select(func.coalesce(func.sum(Activity.total_duration_seconds), 0)).where(
-                Activity.user_id == user_id,
-                func.date(Activity.started_at) >= start_day.isoformat(),
-                func.date(Activity.started_at) <= end_day.isoformat(),
-            )
+            _training_activity_sum_query(func.coalesce(func.sum(Activity.total_duration_seconds), 0), user_id, start_day, end_day)
         )
         or 0
     )
@@ -228,11 +325,7 @@ def activity_load_seconds(db: Session, user_id: int, start_day: date, end_day: d
 def activity_distance(db: Session, user_id: int, start_day: date, end_day: date) -> float:
     return float(
         db.scalar(
-            select(func.coalesce(func.sum(Activity.distance_meters), 0)).where(
-                Activity.user_id == user_id,
-                func.date(Activity.started_at) >= start_day.isoformat(),
-                func.date(Activity.started_at) <= end_day.isoformat(),
-            )
+            _training_activity_sum_query(func.coalesce(func.sum(Activity.distance_meters), 0), user_id, start_day, end_day)
         )
         or 0
     )
@@ -241,13 +334,35 @@ def activity_distance(db: Session, user_id: int, start_day: date, end_day: date)
 def activities_between(db: Session, user_id: int, start_day: date, end_day: date) -> list[Activity]:
     return list(
         db.scalars(
-            select(Activity)
+            _training_activity_query(user_id)
             .where(
-                Activity.user_id == user_id,
                 func.date(Activity.started_at) >= start_day.isoformat(),
                 func.date(Activity.started_at) <= end_day.isoformat(),
             )
             .order_by(Activity.started_at.desc())
+        )
+    )
+
+
+def _training_activity_query(user_id: int):
+    return select(Activity).join(DataSource, Activity.data_source_id == DataSource.id).where(
+        Activity.user_id == user_id,
+        Activity.primary_activity_id.is_(None),
+        ~DataSource.name.in_(EXCLUDED_TRAINING_ACTIVITY_SOURCES),
+    )
+
+
+def _training_activity_sum_query(column, user_id: int, start_day: date, end_day: date):
+    return (
+        select(column)
+        .select_from(Activity)
+        .join(DataSource, Activity.data_source_id == DataSource.id)
+        .where(
+            Activity.user_id == user_id,
+            Activity.primary_activity_id.is_(None),
+            ~DataSource.name.in_(EXCLUDED_TRAINING_ACTIVITY_SOURCES),
+            func.date(Activity.started_at) >= start_day.isoformat(),
+            func.date(Activity.started_at) <= end_day.isoformat(),
         )
     )
 
@@ -274,6 +389,11 @@ def _quality(missing_count: int) -> str:
 def _avg(values: list[float | int | None]) -> float | None:
     clean = [float(v) for v in values if v is not None]
     return round(mean(clean), 1) if clean else None
+
+
+def _sum_optional(values: list[float | int | None]) -> float | None:
+    clean = [float(v) for v in values if v is not None]
+    return round(sum(clean), 1) if clean else None
 
 
 def _weekly_alerts(duration: int, previous_duration: int, monotony: float) -> list[str]:
@@ -312,3 +432,4 @@ def _json_safe(value: object) -> object:
     if isinstance(value, list):
         return [_json_safe(v) for v in value]
     return value
+

@@ -1,9 +1,150 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="page-title"><div><p class="eyebrow">Integracoes</p><h1>Fontes externas</h1></div></section>
-<section class="three-col">
-  <article class="panel"><h2>Strava</h2><p>Status: {{ strava_status }}.</p>{% if strava_scopes %}<p class="muted">Escopos: {{ strava_scopes }}</p>{% endif %}{% if strava_last_sync %}<p class="muted">Ultima sincronizacao: {{ strava_last_sync|localdt }}</p>{% endif %}{% if strava_missing and not strava_connected %}<p class="muted">Falta configurar: {{ strava_missing|join(", ") }}.</p>{% endif %}<p class="muted">Redirect URI: {{ strava_redirect_uri }}</p>{% if message %}<p class="muted">{{ message }}</p>{% endif %}{% if strava_connected %}<form method="post" action="/integrations/strava/sync"><button type="submit">Sincronizar agora</button></form>{% elif strava_configured %}<a class="button" href="/integrations/strava/connect">Conectar Strava</a>{% else %}<button disabled>Conectar Strava</button>{% endif %}<form method="post" action="/integrations/strava/disconnect"><button type="submit">Desconectar</button></form></article>
-  <article class="panel"><h2>WHOOP</h2><p>Fase 3.</p><button disabled>Conectar WHOOP</button></article>
-  <article class="panel"><h2>Garmin</h2><p>Importacao FIT local.</p><a class="button" href="/importacoes">Importar FIT</a></article>
+{% if strava_sync_running or whoop_sync_running %}<meta http-equiv="refresh" content="5">{% endif %}
+
+<section class="page-title">
+  <div>
+    <p class="eyebrow">Integracoes</p>
+    <h1>Fontes externas</h1>
+  </div>
+</section>
+
+{% if message %}
+<p class="notice">{{ message }}</p>
+{% endif %}
+
+<section class="three-col integrations-grid">
+  <article class="panel integration-card">
+    <div class="integration-head">
+      <h2>Strava</h2>
+      <span class="status-pill {% if strava_connected %}ok{% endif %}">{{ strava_status }}</span>
+    </div>
+    <p class="muted">Status: {{ strava_status }}.</p>
+
+    {% if strava_last_sync %}
+    <p class="muted">Ultima sincronizacao: {{ strava_last_sync|localdt }}</p>
+    {% endif %}
+
+    {% if strava_sync_running %}
+    <div class="sync-state">
+      <p>Sincronizando Strava...</p>
+      {% if strava_sync_progress %}
+      <progress value="{{ strava_sync_progress.percent }}" max="100">{{ strava_sync_progress.percent }}%</progress>
+      {% else %}
+      <progress>Sincronizando</progress>
+      {% endif %}
+    </div>
+    {% elif strava_last_summary %}
+    <div class="sync-summary {% if strava_last_summary.is_error %}error{% endif %}">
+      <strong>Ultimo resultado: {{ strava_last_summary.status }}</strong>
+      {% if strava_last_summary.lines %}
+      <p>{{ strava_last_summary.lines|join(" · ") }}</p>
+      {% endif %}
+      {% if strava_last_summary.error %}
+      <p>{{ strava_last_summary.error }}</p>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if strava_missing and not strava_connected %}
+    <p class="muted">Falta configurar: {{ strava_missing|join(", ") }}.</p>
+    {% endif %}
+
+    <div class="actions">
+      {% if strava_connected %}
+      <form method="post" action="/integrations/strava/sync">
+        <button type="submit" {% if strava_sync_running %}disabled{% endif %}>
+          {% if strava_sync_running %}Sincronizando...{% else %}Sincronizar agora{% endif %}
+        </button>
+      </form>
+      <form method="post" action="/integrations/strava/disconnect">
+        <button type="submit" class="secondary">Desconectar</button>
+      </form>
+      {% elif strava_configured %}
+      <a class="button" href="/integrations/strava/connect">Conectar Strava</a>
+      {% else %}
+      <button disabled>Conectar Strava</button>
+      {% endif %}
+    </div>
+
+    <details class="technical-details">
+      <summary>Detalhes tecnicos</summary>
+      {% if strava_scopes %}<p>Escopos: {{ strava_scopes }}</p>{% endif %}
+      <p>Callback: {{ strava_redirect_uri }}</p>
+    </details>
+  </article>
+
+  <article class="panel integration-card">
+    <div class="integration-head">
+      <h2>WHOOP</h2>
+      <span class="status-pill {% if whoop_connected %}ok{% endif %}">{{ whoop_status }}</span>
+    </div>
+    <p class="muted">Status: {{ whoop_status }}.</p>
+
+    {% if whoop_athlete %}
+    <p class="muted">Conta: {{ whoop_athlete }}</p>
+    {% endif %}
+    {% if whoop_last_sync %}
+    <p class="muted">Ultima sincronizacao: {{ whoop_last_sync|localdt }}</p>
+    {% endif %}
+
+    {% if whoop_sync_running %}
+    <div class="sync-state">
+      <p>Sincronizando WHOOP...</p>
+      <progress>Sincronizando</progress>
+    </div>
+    {% elif whoop_last_summary %}
+    <div class="sync-summary {% if whoop_last_summary.is_error %}error{% endif %}">
+      <strong>Ultimo resultado: {{ whoop_last_summary.status }}</strong>
+      {% if whoop_last_summary.lines %}
+      <p>{{ whoop_last_summary.lines|join(" · ") }}</p>
+      {% endif %}
+      {% if whoop_last_summary.error %}
+      <p>{{ whoop_last_summary.error }}</p>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if whoop_last_error %}
+    <p class="alert">{{ whoop_last_error }}</p>
+    {% endif %}
+    {% if whoop_missing and not whoop_connected %}
+    <p class="muted">Falta configurar: {{ whoop_missing|join(", ") }}.</p>
+    {% endif %}
+
+    <div class="actions">
+      {% if whoop_connected %}
+      <form method="post" action="/integrations/whoop/sync">
+        <button type="submit" {% if whoop_sync_running %}disabled{% endif %}>
+          {% if whoop_sync_running %}Sincronizando...{% else %}Sincronizar agora{% endif %}
+        </button>
+      </form>
+      <form method="post" action="/integrations/whoop/disconnect">
+        <button type="submit" class="secondary">Desconectar</button>
+      </form>
+      {% elif whoop_configured %}
+      <a class="button" href="/integrations/whoop/connect">Conectar WHOOP</a>
+      {% else %}
+      <button disabled>Conectar WHOOP</button>
+      {% endif %}
+    </div>
+
+    <details class="technical-details">
+      <summary>Detalhes tecnicos</summary>
+      {% if whoop_scopes %}<p>Escopos: {{ whoop_scopes }}</p>{% endif %}
+      <p>Callback: {{ whoop_redirect_uri }}</p>
+    </details>
+  </article>
+
+  <article class="panel integration-card">
+    <div class="integration-head">
+      <h2>Garmin</h2>
+      <span class="status-pill ok">FIT local</span>
+    </div>
+    <p class="muted">Arquivos FIT continuam sendo importados manualmente quando necessario.</p>
+    <div class="actions">
+      <a class="button" href="/importacoes">Importar FIT</a>
+    </div>
+  </article>
 </section>
 {% endblock %}

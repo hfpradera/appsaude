@@ -9,7 +9,9 @@ from app.models import (
     ActivitySample,
     ActivitySourceLink,
     DataSource,
+    IntegrationState,
     OAuthCredential,
+    SyncLog,
     User,
 )
 from app.services.reconcile_new import reconcile_strava_activity
@@ -292,3 +294,26 @@ def test_dashboard_query_has_single_primary_run_for_linked_case(db_session, conn
         )
     ).all()
     assert len(primary_runs) == 1
+
+
+def test_sync_commits_progress_and_limits_work_per_run(db_session, connected, monkeypatch):
+    user, _, _ = connected
+    monkeypatch.setenv("STRAVA_SYNC_MAX_ACTIVITIES_PER_RUN", "2")
+    get_settings.cache_clear()
+    try:
+        stats = sync_strava(
+            db_session,
+            user.id,
+            FakeClient(pages=[[payload(1201), payload(1202), payload(1203)]]),
+        )
+    finally:
+        get_settings.cache_clear()
+    assert stats["fetched"] == 2
+    state = db_session.scalar(select(IntegrationState))
+    assert state is not None
+    assert state.status == "connected"
+    log = db_session.scalar(select(SyncLog).where(SyncLog.action == "strava_sync"))
+    assert log is not None
+    assert log.status == "completed"
+    assert '"processed": 2' in log.message
+    assert '"remaining_in_run": 0' in log.message

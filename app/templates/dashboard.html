@@ -1,49 +1,417 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="page-title">
+<section class="dashboard-app" data-dashboard>
+  <header class="dash-header">
+    <div>
+      <p class="eyebrow">Dashboard executivo</p>
+      <h1>Humberto Performance</h1>
+      <p class="muted" id="active-period">Carregando periodo...</p>
+    </div>
+    <div class="day-nav" aria-label="Navegacao por data">
+      <button type="button" class="secondary" data-day-step="-1" aria-label="Dia anterior">&lt;</button>
+      <input type="date" id="filter-date" value="{{ data.day.isoformat() }}">
+      <button type="button" class="secondary" data-day-step="1" aria-label="Proximo dia">&gt;</button>
+      <button type="button" data-today>Hoje</button>
+    </div>
+  </header>
+
+  <form class="filter-bar" id="dashboard-filters">
+    <label>Periodo
+      <select name="period" id="period">
+        <option value="today">Hoje</option>
+        <option value="yesterday">Ontem</option>
+        <option value="7">7 dias</option>
+        <option value="14" selected>14 dias</option>
+        <option value="30">30 dias</option>
+        <option value="90">90 dias</option>
+        <option value="custom">Personalizado</option>
+      </select>
+    </label>
+    <label>Inicio
+      <input type="date" name="start_date" id="start-date" disabled>
+    </label>
+    <label>Fim
+      <input type="date" name="end_date" id="end-date" disabled>
+    </label>
+    <label>Fonte
+      <select name="source" id="source">
+        <option value="all">Todas</option>
+        <option value="whoop">WHOOP</option>
+        <option value="strava">Strava</option>
+        <option value="garmin_fit">Garmin/FIT</option>
+      </select>
+    </label>
+    <label>Tipo
+      <select name="activity_type" id="activity-type">
+        <option value="all">Todas</option>
+        <option value="corrida">Corrida</option>
+        <option value="caminhada">Caminhada</option>
+        <option value="ciclismo">Ciclismo</option>
+        <option value="musculacao">Musculacao</option>
+        <option value="natacao">Natacao</option>
+        <option value="outras">Outras</option>
+      </select>
+    </label>
+    <label>Status
+      <select name="status" id="status">
+        <option value="all">Todos</option>
+        <option value="recuperacao_baixa">Recuperacao baixa</option>
+        <option value="moderada">Moderada</option>
+        <option value="boa">Boa</option>
+        <option value="dias_com_treino">Dias com treino</option>
+        <option value="dias_sem_treino">Dias sem treino</option>
+      </select>
+    </label>
+    <label>Pesquisar
+      <input type="search" id="activity-search" placeholder="atividade, fonte, id">
+    </label>
+    <button type="button" class="secondary" id="clear-filters">Limpar filtros</button>
+  </form>
+
+  <section class="decision-hero" id="summary-card" aria-live="polite">
+    <div>
+      <span class="status-badge">Carregando</span>
+      <h2>Como estou hoje?</h2>
+      <p>Buscando dados sincronizados.</p>
+    </div>
+    <div class="score-ring" id="score-ring">-</div>
+  </section>
+
+  <section class="metric-grid interactive" id="metric-cards"></section>
+
+  <nav class="tabs" aria-label="Secoes do dashboard">
+    <button type="button" class="active" data-tab="overview">Visao geral</button>
+    <button type="button" data-tab="recovery">Recuperacao</button>
+    <button type="button" data-tab="sleep">Sono</button>
+    <button type="button" data-tab="activities">Atividades</button>
+    <button type="button" data-tab="trends">Tendencias</button>
+    <button type="button" data-tab="timeline">Linha do tempo</button>
+    <button type="button" data-tab="raw">Dados brutos</button>
+  </nav>
+
+  <section class="tab-panel active" data-panel="overview">
+    <div class="two-col">
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Prontidao e carga</h2>
+          <button type="button" class="secondary" id="refresh-analysis">Gerar novamente</button>
+        </div>
+        <dl class="rows" id="summary-rows"></dl>
+      </article>
+      <article class="panel">
+        <h2>Analise diaria</h2>
+        <div id="analysis-content" class="analysis-readable">
+          <p class="muted">Sem analise carregada.</p>
+        </div>
+      </article>
+    </div>
+    <article class="panel">
+      <h2>Atividades recentes</h2>
+      <div id="recent-activities"></div>
+    </article>
+  </section>
+
+  <section class="tab-panel" data-panel="recovery">
+    <article class="panel">
+      <h2>Recuperacao</h2>
+      <div class="chart-grid" data-chart-group="recovery"></div>
+    </article>
+  </section>
+
+  <section class="tab-panel" data-panel="sleep">
+    <article class="panel">
+      <h2>Sono</h2>
+      <div class="chart-grid" data-chart-group="sleep"></div>
+    </article>
+  </section>
+
+  <section class="tab-panel" data-panel="activities">
+    <article class="panel">
+      <div class="panel-head">
+        <h2>Tabela de atividades</h2>
+        <a class="button" id="export-csv" href="/api/dashboard/activities.csv">Exportar CSV</a>
+      </div>
+      <div class="table-tools">
+        <span id="activity-count" class="muted"></span>
+      </div>
+      <div id="activity-table"></div>
+    </article>
+  </section>
+
+  <section class="tab-panel" data-panel="trends">
+    <article class="panel">
+      <h2>Tendencias</h2>
+      <div class="chart-grid" data-chart-group="trends"></div>
+      <div class="comparison-box" id="period-comparison"></div>
+    </article>
+  </section>
+
+  <section class="tab-panel" data-panel="timeline">
+    <div class="two-col">
+      <article class="panel">
+        <h2>Calendario mensal</h2>
+        <div id="calendar" class="mini-calendar"></div>
+      </article>
+      <article class="panel">
+        <h2>Linha do tempo consolidada</h2>
+        <div id="timeline" class="timeline"></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="tab-panel" data-panel="raw">
+    <article class="panel">
+      <h2>Qualidade e origem dos dados</h2>
+      <div id="data-quality"></div>
+    </article>
+  </section>
+</section>
+
+<aside class="metric-drawer" id="metric-drawer" aria-hidden="true">
   <div>
-    <p class="eyebrow">Hoje</p>
-    <h1>{{ data.day.strftime("%d/%m/%Y") }}</h1>
+    <button type="button" class="secondary drawer-close" aria-label="Fechar">Fechar</button>
+    <h2 id="drawer-title">Metrica</h2>
+    <p id="drawer-summary" class="muted"></p>
+    <div id="drawer-chart"></div>
+    <dl class="rows" id="drawer-stats"></dl>
   </div>
-  <span class="pill">{{ data.classification.label }}</span>
-</section>
+</aside>
 
-<section class="metric-grid">
-  <article><span>Recovery</span><strong>{{ data.recovery.recovery_score if data.recovery else "-" }}%</strong></article>
-  <article><span>HRV</span><strong>{{ data.recovery.hrv_ms if data.recovery else "-" }} ms</strong></article>
-  <article><span>Repouso</span><strong>{{ data.recovery.resting_hr if data.recovery else "-" }} bpm</strong></article>
-  <article><span>Sono</span><strong>{{ data.sleep.sleep_duration_seconds|seconds if data.sleep else "-" }}</strong></article>
-  <article><span>Strain</span><strong>{{ data.recovery.daily_strain if data.recovery else "-" }}</strong></article>
-  <article><span>Qualidade</span><strong>{{ data.data_quality }}</strong></article>
-</section>
+<script>
+const state = { payload: null, selectedMetric: null };
+const metricDescriptions = {
+  recovery: "Percentual de recuperacao sincronizado pela WHOOP.",
+  hrv: "Variabilidade da frequencia cardiaca em milissegundos.",
+  resting_hr: "Frequencia cardiaca de repouso.",
+  sleep: "Duracao de sono registrada.",
+  strain: "Carga fisiologica diaria quando disponivel.",
+  load: "Tempo total de atividades nos ultimos 7 dias filtrados.",
+  activities: "Quantidade de atividades no periodo filtrado.",
+  distance: "Distancia total das atividades no periodo filtrado."
+};
 
-<section class="two-col">
-  <article class="panel">
-    <h2>Carga e semana</h2>
-    <dl class="rows">
-      <div><dt>Últimos 7 dias</dt><dd>{{ data.load_7d_seconds|seconds }}</dd></div>
-      <div><dt>Últimos 28 dias</dt><dd>{{ data.load_28d_seconds|seconds }}</dd></div>
-      <div><dt>Distância semanal</dt><dd>{{ data.weekly_distance_km }} km</dd></div>
-      <div><dt>Duração semanal</dt><dd>{{ data.weekly_duration }}</dd></div>
-      <div><dt>Média 4 semanas</dt><dd>{{ data.four_week_avg }}</dd></div>
-    </dl>
-  </article>
-  <article class="panel">
-    <h2>Sugestão conservadora</h2>
-    <p>{{ data.classification.reasons|join(" ") }}</p>
-    {% for warning in data.classification.warnings %}
-      <p class="alert">{{ warning }}</p>
-    {% endfor %}
-    <p class="muted">O sistema não faz diagnóstico médico nem libera clinicamente para exercício.</p>
-  </article>
-</section>
-
-<section class="panel">
-  <h2>Atividade mais recente</h2>
-  {% if data.recent_activity %}
-    <p><a href="/atividades/{{ data.recent_activity.id }}">{{ data.recent_activity.activity_type|title }}</a> em {{ data.recent_activity.started_at|localdt }} · {{ data.recent_activity.total_duration_seconds|seconds }}</p>
-  {% else %}
-    <p>Nenhuma atividade registrada.</p>
-  {% endif %}
-</section>
+function qs(id) { return document.getElementById(id); }
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+}
+function todayIso() { return new Date().toISOString().slice(0, 10); }
+function addDays(iso, days) {
+  const date = new Date(iso + "T12:00:00");
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+function params() {
+  const period = qs("period").value;
+  const query = new URLSearchParams({
+    date: qs("filter-date").value,
+    period,
+    source: qs("source").value,
+    activity_type: qs("activity-type").value,
+    status: qs("status").value,
+    search: qs("activity-search").value
+  });
+  if (period === "custom") {
+    if (qs("start-date").value) query.set("start_date", qs("start-date").value);
+    if (qs("end-date").value) query.set("end_date", qs("end-date").value);
+  }
+  return query;
+}
+async function loadDashboard() {
+  const query = params();
+  qs("export-csv").href = "/api/dashboard/activities.csv?" + query.toString();
+  const response = await fetch("/api/dashboard?" + query.toString(), { headers: { "Accept": "application/json" } });
+  if (!response.ok) throw new Error("Falha ao carregar dashboard");
+  state.payload = await response.json();
+  renderAll();
+}
+function renderAll() {
+  renderSummary();
+  renderMetrics();
+  renderCharts();
+  renderActivities();
+  renderTimeline();
+  renderCalendar();
+  renderQuality();
+  renderAnalysis();
+}
+function renderSummary() {
+  const summary = state.payload.summary;
+  qs("active-period").textContent = "Periodo ativo: " + summary.active_period;
+  qs("summary-card").innerHTML = `
+    <div>
+      <span class="status-badge ${esc(summary.classification_key)}">${esc(summary.classification)}</span>
+      <h2>${esc(summary.score_label)}</h2>
+      <p><strong>Recomendacao:</strong> ${esc(summary.recommendation)}</p>
+      <ul>${summary.reasons.map(reason => `<li>${esc(reason)}</li>`).join("")}</ul>
+    </div>
+    <div class="score-ring">${esc(summary.score_label)}</div>`;
+  qs("summary-rows").innerHTML = `
+    <div><dt>Periodo</dt><dd>${esc(summary.period)}</dd></div>
+    <div><dt>Classificacao</dt><dd>${esc(summary.classification)}</dd></div>
+    <div><dt>Qualidade dos dados</dt><dd>${esc(summary.data_quality)}</dd></div>
+    <div><dt>Recomendacao</dt><dd>${esc(summary.recommendation)}</dd></div>`;
+}
+function renderMetrics() {
+  qs("metric-cards").innerHTML = state.payload.metrics.map(metric => `
+    <button type="button" class="metric-card" data-metric="${esc(metric.key)}">
+      <span>${esc(metric.label)}</span>
+      <strong>${esc(metric.display)}</strong>
+      <small>${esc(metric.trend)} · 28d: ${esc(metric.delta_28d.display)}</small>
+      <em>${esc(metric.source)}</em>
+    </button>`).join("");
+}
+function renderCharts() {
+  const rows = state.payload.trend.rows;
+  const charts = {
+    recovery: [["recovery", "Recovery", "%"], ["hrv", "HRV", "ms"], ["resting_hr", "FC repouso", "bpm"], ["strain", "Strain", ""]],
+    sleep: [["sleep_hours", "Sono", "h"]],
+    trends: [["activity_minutes", "Duracao de atividades", "min"], ["distance_km", "Distancia", "km"], ["recovery", "Recovery", "%"], ["sleep_hours", "Sono", "h"]]
+  };
+  Object.entries(charts).forEach(([group, specs]) => {
+    document.querySelector(`[data-chart-group="${group}"]`).innerHTML = specs.map(spec => chartHtml(rows, spec[0], spec[1], spec[2])).join("");
+  });
+  const c = state.payload.trend.comparison;
+  qs("period-comparison").innerHTML = `
+    <strong>Periodo atual x anterior</strong>
+    <span>Atividade: ${c.current_activity_minutes} min vs ${c.previous_activity_minutes} min</span>
+    <span>Distancia: ${c.current_distance_km} km vs ${c.previous_distance_km} km</span>`;
+}
+function chartHtml(rows, key, title, unit) {
+  const values = rows.map(row => row[key]).filter(value => value !== null && value !== undefined);
+  const max = Math.max(...values, 1);
+  const bars = rows.map(row => {
+    const value = row[key];
+    const height = value ? Math.max(4, (value / max) * 100) : 2;
+    return `<button type="button" style="height:${height}%" title="${esc(row.day)} · ${esc(value ?? "dados insuficientes")} ${unit}" data-chart-date="${esc(row.day)}"></button>`;
+  }).join("");
+  return `<div class="chart-card"><h3>${esc(title)}</h3><div class="bar-chart interactive-bars">${bars}</div></div>`;
+}
+function renderActivities() {
+  const rows = state.payload.activities.rows;
+  qs("activity-count").textContent = `${state.payload.activities.total} atividade(s) no filtro`;
+  qs("recent-activities").innerHTML = tableHtml(rows.slice(0, 5));
+  qs("activity-table").innerHTML = tableHtml(rows);
+}
+function tableHtml(rows) {
+  if (!rows.length) return `<p class="muted">Dados insuficientes para este filtro.</p>`;
+  return `<table>
+    <thead><tr><th>Data</th><th>Horario</th><th>Nome</th><th>Modalidade</th><th>Duracao</th><th>Distancia</th><th>FC media</th><th>Strain</th><th>Fonte</th><th>Deduplicacao</th></tr></thead>
+    <tbody>${rows.map(row => `<tr>
+      <td>${esc(row.date)}</td><td>${esc(row.time)}</td><td><a href="${esc(row.href)}">${esc(row.name)}</a></td>
+      <td>${esc(row.type)}</td><td>${esc(row.duration)}</td><td>${esc(row.distance_km)} km</td>
+      <td>${esc(row.avg_hr ?? "dados insuficientes")}</td><td>${esc(row.strain ?? "dados insuficientes")}</td>
+      <td><span class="source-badge">${esc(row.source)}</span></td><td>${esc(row.duplicate_status)}</td>
+    </tr>`).join("")}</tbody></table>`;
+}
+function renderTimeline() {
+  const rows = state.payload.timeline;
+  qs("timeline").innerHTML = rows.length ? rows.map(row => `
+    <div tabindex="0">
+      <strong>${esc(row.kind)} · ${esc(row.title)}</strong>
+      <span>${esc(row.when)} · ${esc(row.source)}</span>
+      <p>${esc(row.detail)}</p>
+    </div>`).join("") : `<p class="muted">Dados insuficientes para montar a linha do tempo.</p>`;
+}
+function renderCalendar() {
+  const days = state.payload.calendar.days;
+  qs("calendar").innerHTML = days.map(day => `
+    <button type="button" class="${day.date === state.payload.calendar.selected ? "active" : ""}" data-calendar-day="${esc(day.date)}">
+      <strong>${Number(day.date.slice(-2))}</strong>
+      <span>R ${esc(day.recovery ?? "-")}</span>
+      <span>${day.has_activity ? "treino" : "sem treino"}</span>
+      <span>${esc(day.sleep_hours ?? "-")}h</span>
+    </button>`).join("");
+}
+function renderQuality() {
+  const quality = state.payload.data_quality;
+  qs("data-quality").innerHTML = `
+    <p><strong>Qualidade:</strong> ${esc(quality.level)}</p>
+    <p><strong>Ausentes:</strong> ${quality.missing.length ? quality.missing.map(esc).join(", ") : "nenhum item principal"}</p>
+    <table><thead><tr><th>Fonte</th><th>Status</th><th>Ultima sync</th><th>Erro</th></tr></thead>
+    <tbody>${quality.sources.map(source => `<tr><td>${esc(source.name)}</td><td>${esc(source.status)}</td><td>${esc(source.last_sync ?? "-")}</td><td>${esc(source.last_error ?? "-")}</td></tr>`).join("")}</tbody></table>`;
+}
+function renderAnalysis() {
+  const analysis = state.payload.analysis;
+  if (!analysis) {
+    qs("analysis-content").innerHTML = `<p class="muted">Sem analise gerada para este dia.</p>`;
+    return;
+  }
+  qs("analysis-content").innerHTML = `
+    <p class="muted">Gerada em ${esc(analysis.created_at)} · Periodo analisado: ${esc(analysis.day)}</p>
+    ${analysis.sections.map(section => `<section><h3>${esc(section.title)}</h3><p>${esc(section.body).replaceAll("\n", "<br>")}</p></section>`).join("")}`;
+}
+function openDrawer(metricKey) {
+  const metric = state.payload.metrics.find(item => item.key === metricKey);
+  if (!metric) return;
+  state.selectedMetric = metricKey;
+  qs("drawer-title").textContent = metric.label;
+  qs("drawer-summary").textContent = `${metricDescriptions[metricKey] || "Metrica sincronizada."} Fonte: ${metric.source}.`;
+  qs("drawer-chart").innerHTML = chartHtml(state.payload.trend.rows, metricTrendKey(metricKey), metric.label, metric.unit);
+  qs("drawer-stats").innerHTML = `
+    <div><dt>Valor atual</dt><dd>${esc(metric.display)}</dd></div>
+    <div><dt>Dia anterior</dt><dd>${esc(metric.delta_previous.display)}</dd></div>
+    <div><dt>Media 28 dias</dt><dd>${esc(metric.delta_28d.display)}</dd></div>
+    <div><dt>Fonte</dt><dd>${esc(metric.source)}</dd></div>
+    <div><dt>Ultima atualizacao</dt><dd>${esc(metric.updated_at ?? "dados insuficientes")}</dd></div>`;
+  qs("metric-drawer").setAttribute("aria-hidden", "false");
+}
+function metricTrendKey(metricKey) {
+  return {
+    sleep: "sleep_hours",
+    load: "activity_minutes",
+    activities: "activity_minutes",
+    distance: "distance_km"
+  }[metricKey] || metricKey;
+}
+document.addEventListener("click", event => {
+  const metric = event.target.closest("[data-metric]");
+  if (metric) openDrawer(metric.dataset.metric);
+  const tab = event.target.closest("[data-tab]");
+  if (tab) {
+    document.querySelectorAll("[data-tab]").forEach(item => item.classList.remove("active"));
+    document.querySelectorAll("[data-panel]").forEach(item => item.classList.remove("active"));
+    tab.classList.add("active");
+    document.querySelector(`[data-panel="${tab.dataset.tab}"]`).classList.add("active");
+  }
+  const day = event.target.closest("[data-calendar-day]");
+  if (day) { qs("filter-date").value = day.dataset.calendarDay; loadDashboard(); }
+  const chartDay = event.target.closest("[data-chart-date]");
+  if (chartDay) { qs("filter-date").value = chartDay.dataset.chartDate; qs("period").value = "today"; loadDashboard(); }
+  const step = event.target.closest("[data-day-step]");
+  if (step) { qs("filter-date").value = addDays(qs("filter-date").value, Number(step.dataset.dayStep)); loadDashboard(); }
+  if (event.target.closest("[data-today]")) { qs("filter-date").value = todayIso(); qs("period").value = "today"; loadDashboard(); }
+  if (event.target.closest(".drawer-close")) qs("metric-drawer").setAttribute("aria-hidden", "true");
+});
+["period", "source", "activity-type", "status", "filter-date", "start-date", "end-date"].forEach(id => {
+  qs(id).addEventListener("change", () => {
+    const custom = qs("period").value === "custom";
+    qs("start-date").disabled = !custom;
+    qs("end-date").disabled = !custom;
+    loadDashboard();
+  });
+});
+qs("activity-search").addEventListener("input", () => {
+  clearTimeout(window.dashboardSearchTimer);
+  window.dashboardSearchTimer = setTimeout(loadDashboard, 250);
+});
+qs("clear-filters").addEventListener("click", () => {
+  qs("period").value = "14";
+  qs("source").value = "all";
+  qs("activity-type").value = "all";
+  qs("status").value = "all";
+  qs("activity-search").value = "";
+  qs("start-date").value = "";
+  qs("end-date").value = "";
+  qs("start-date").disabled = true;
+  qs("end-date").disabled = true;
+  loadDashboard();
+});
+qs("refresh-analysis").addEventListener("click", async () => {
+  await fetch("/api/dashboard/analysis/generate?" + params().toString(), { method: "POST" });
+  await loadDashboard();
+});
+loadDashboard().catch(error => {
+  qs("summary-card").innerHTML = `<div><span class="status-badge descanso">Erro</span><h2>Dashboard indisponivel</h2><p>${esc(error.message)}</p></div>`;
+});
+</script>
 {% endblock %}

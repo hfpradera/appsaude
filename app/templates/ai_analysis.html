@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-title">
+  <div>
+    <p class="eyebrow">Analise IA</p>
+    <h1>Analise diaria personalizada</h1>
+  </div>
+  <span class="pill">{{ ai.mode }}</span>
+</section>
+
+{% if message %}
+<p class="notice">{{ message }}</p>
+{% endif %}
+
+<section class="two-col">
+  <article class="panel">
+    <h2>Fonte dos dados</h2>
+    <p>Esta analise usa somente dados sincronizados no banco local: Strava, WHOOP e imports FIT.</p>
+    <dl class="rows">
+      <div><dt>Recovery</dt><dd>{{ data.recovery.recovery_score if data.recovery else "-" }}%</dd></div>
+      <div><dt>HRV</dt><dd>{{ data.recovery.hrv_ms if data.recovery else "-" }} ms</dd></div>
+      <div><dt>Sono</dt><dd>{{ data.sleep.sleep_duration_seconds|seconds if data.sleep else "-" }}</dd></div>
+      <div><dt>Carga 7d</dt><dd>{{ data.load_7d_seconds|seconds }}</dd></div>
+      <div><dt>IA externa</dt><dd>{{ "ligada" if ai.enabled else "desligada" }}</dd></div>
+    </dl>
+    <form method="post" action="/analise-ia/gerar">
+      <button type="submit">Gerar analise agora</button>
+    </form>
+  </article>
+
+  <article class="panel">
+    <h2>Ultima analise</h2>
+    {% if summary %}
+      <p class="muted">{{ summary.day }} · {{ summary.created_at|localdt }}</p>
+      <pre>{{ summary.summary_markdown }}</pre>
+    {% else %}
+      <p>Nenhuma analise gerada ainda.</p>
+    {% endif %}
+  </article>
+</section>
+{% endblock %}

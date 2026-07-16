@@ -163,6 +163,31 @@ class ActivitySourceLink(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
 
+class ExternalRecord(Base):
+    __tablename__ = "external_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "data_source_id",
+            "kind",
+            "external_id",
+            name="uq_external_record_source_kind_external",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    data_source_id: Mapped[int] = mapped_column(ForeignKey("data_sources.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(80), index=True)
+    external_id: Mapped[str] = mapped_column(String(255))
+    recorded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    day: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    data_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
 class DailyRecovery(Base):
     __tablename__ = "daily_recoveries"
     __table_args__ = (UniqueConstraint("user_id", "day", "data_source_id", name="uq_recovery_day_source"),)
@@ -258,3 +283,206 @@ class SyncLog(Base):
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AiConversation(Base):
+    __tablename__ = "ai_conversations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(160), default="Nova conversa")
+    provider_conversation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AiMessage(Base):
+    __tablename__ = "ai_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("ai_conversations.id"), index=True)
+    role: Mapped[str] = mapped_column(String(40))
+    content: Mapped[str] = mapped_column(Text)
+    tool_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    tool_call_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default="completed")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class AiRun(Base):
+    __tablename__ = "ai_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("ai_conversations.id"), index=True)
+    model: Mapped[str] = mapped_column(String(120))
+    prompt_version: Mapped[str] = mapped_column(String(40), default="ai-chat-v1")
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cached_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    tool_call_count: Mapped[int] = mapped_column(Integer, default=0)
+    currency: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    provider_response_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    estimated_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default="completed")
+    error_sanitized: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class AiPendingAction(Base):
+    __tablename__ = "ai_pending_actions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("ai_conversations.id"), index=True)
+    tool_name: Mapped[str] = mapped_column(String(120), index=True)
+    arguments_json: Mapped[str] = mapped_column(Text)
+    summary: Mapped[str] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    status: Mapped[str] = mapped_column(String(40), default="pending", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AiMemory(Base):
+    __tablename__ = "ai_memories"
+    __table_args__ = (UniqueConstraint("user_id", "category", "key", name="uq_ai_memory_user_category_key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    category: Mapped[str] = mapped_column(String(80), index=True)
+    key: Mapped[str] = mapped_column(String(160))
+    value_json: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(80), default="user_confirmed")
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    confirmed_by_user: Mapped[bool] = mapped_column(default=True)
+    active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AiAuditLog(Base):
+    __tablename__ = "ai_audit_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    tool_name: Mapped[str] = mapped_column(String(120), index=True)
+    target_type: Mapped[str] = mapped_column(String(80))
+    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    action: Mapped[str] = mapped_column(String(80))
+    payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class MealLog(Base):
+    __tablename__ = "meal_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    consumed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    meal_type: Mapped[str] = mapped_column(String(80), default="refeicao")
+    description: Mapped[str] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(String(80), default="manual")
+    confirmed: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
+class MealItem(Base):
+    __tablename__ = "meal_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    meal_log_id: Mapped[int] = mapped_column(ForeignKey("meal_logs.id"), index=True)
+    name: Mapped[str] = mapped_column(String(160))
+    quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    calories: Mapped[float | None] = mapped_column(Float, nullable=True)
+    protein_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    carbohydrate_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fat_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    nutrition_source: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class RunningShoe(Base):
+    __tablename__ = "running_shoes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(160), index=True)
+    brand: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    color: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    purchase_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    first_use_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    initial_distance_km: Mapped[float] = mapped_column(Float, default=0.0)
+    preferred_uses_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    surfaces_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    expected_min_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expected_max_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default="active")
+    condition_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ManualShoeUsage(Base):
+    __tablename__ = "manual_shoe_usages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    distance_km: Mapped[float] = mapped_column(Float)
+    activity_type: Mapped[str] = mapped_column(String(80), default="running")
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class ShoeActivityLink(Base):
+    __tablename__ = "shoe_activity_links"
+    __table_args__ = (
+        UniqueConstraint("shoe_id", "activity_id", name="uq_shoe_activity"),
+        UniqueConstraint("shoe_id", "manual_usage_id", name="uq_shoe_manual_usage"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    shoe_id: Mapped[int] = mapped_column(ForeignKey("running_shoes.id"), index=True)
+    activity_id: Mapped[int | None] = mapped_column(ForeignKey("activities.id"), nullable=True, index=True)
+    manual_usage_id: Mapped[int | None] = mapped_column(ForeignKey("manual_shoe_usages.id"), nullable=True, index=True)
+    distance_km: Mapped[float] = mapped_column(Float)
+    used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    source: Mapped[str] = mapped_column(String(80), default="manual")
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class DailyNote(Base):
+    __tablename__ = "daily_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    note: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(80), default="manual")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class PlannedActivity(Base):
+    __tablename__ = "planned_activities"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    planned_for: Mapped[date] = mapped_column(Date, index=True)
+    activity_type: Mapped[str] = mapped_column(String(80))
+    distance_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    intensity: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    surface: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

@@ -7,6 +7,7 @@ from app.db import SessionLocal, create_db
 from app.logging_config import configure_logging
 from app.routes import NotAuthenticated, router
 from app.seed import seed_demo_data
+from app.services.sync_scheduler import start_sync_scheduler
 
 
 def create_app() -> FastAPI:
@@ -26,6 +27,7 @@ def create_app() -> FastAPI:
         if settings.app_demo_data:
             with SessionLocal() as db:
                 seed_demo_data(db)
+        start_sync_scheduler()
 
     @app.get("/health")
     def health() -> dict[str, str]:

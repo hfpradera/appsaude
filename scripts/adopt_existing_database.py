@@ -19,11 +19,13 @@ from app.db import Base
 
 BASE_REVISION = "0001_initial"
 STRAVA_REVISION = "0002_strava_integration"
-HEAD_REVISION = "0003_activity_source_links"
+LINKS_REVISION = "0003_activity_source_links"
+HEAD_REVISION = "0006_ai_responses_runtime"
 
 Strategy = Literal[
     "current",
     "stamp_head",
+    "stamp_0003_upgrade",
     "stamp_0002_upgrade",
     "stamp_0001_upgrade",
     "divergent",
@@ -129,6 +131,13 @@ def _table_differences(inspector, tables: list[str]) -> dict[str, list[str]]:
         _require_unique(inspector, differences, "integration_states", {"user_id", "data_source_id"})
     if "activity_source_links" in tables:
         _require_unique(inspector, differences, "activity_source_links", {"data_source_id", "external_id"})
+    if "external_records" in tables:
+        _require_unique(
+            inspector,
+            differences,
+            "external_records",
+            {"data_source_id", "kind", "external_id"},
+        )
     return differences
 
 
@@ -146,7 +155,14 @@ def _require_unique(inspector, differences: dict[str, list[str]], table: str, co
 
 
 def _counts(database_path: Path, tables: list[str]) -> dict[str, int]:
-    tracked = ["activities", "activity_samples", "activity_source_links", "integration_states", "sync_logs"]
+    tracked = [
+        "activities",
+        "activity_samples",
+        "activity_source_links",
+        "external_records",
+        "integration_states",
+        "sync_logs",
+    ]
     with sqlite3.connect(database_path) as con:
         return {
             table: con.execute(f"select count(*) from {table}").fetchone()[0]
@@ -183,13 +199,20 @@ def _choose_strategy(
     if alembic_version:
         return "current"
 
-    base_missing = [name for name in missing_tables if name not in {"integration_states", "activity_source_links"}]
+    base_missing = [
+        name
+        for name in missing_tables
+        if name not in {"integration_states", "activity_source_links", "external_records"}
+    ]
     if base_missing:
         return "divergent"
     has_integration = "integration_states" in tables
     has_links = "activity_source_links" in tables
-    if has_integration and has_links:
+    has_external_records = "external_records" in tables
+    if has_integration and has_links and has_external_records:
         return "stamp_head"
+    if has_integration and has_links:
+        return "stamp_0003_upgrade"
     if has_integration:
         return "stamp_0002_upgrade"
     return "stamp_0001_upgrade"
@@ -219,6 +242,9 @@ def _apply_strategy(report: AdoptionReport) -> None:
         command.upgrade(cfg, "head")
     elif report.strategy == "stamp_head":
         command.stamp(cfg, HEAD_REVISION)
+        command.upgrade(cfg, "head")
+    elif report.strategy == "stamp_0003_upgrade":
+        command.stamp(cfg, LINKS_REVISION)
         command.upgrade(cfg, "head")
     elif report.strategy == "stamp_0002_upgrade":
         command.stamp(cfg, STRAVA_REVISION)

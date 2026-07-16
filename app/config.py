@@ -24,8 +24,37 @@ class Settings(BaseSettings):
     token_encryption_key: str = ""
     strava_sync_overlap_minutes: int = 60
     strava_sync_per_page: int = 100
+    strava_sync_max_activities_per_run: int = 1500
+    strava_sync_max_runtime_seconds: int = 7200
     strava_http_timeout_seconds: int = 15
     strava_refresh_margin_seconds: int = 300
+    whoop_client_id: str = ""
+    whoop_client_secret: str = ""
+    whoop_redirect_uri: str = ""
+    whoop_enabled: bool = True
+    whoop_http_timeout_seconds: int = 15
+    whoop_refresh_margin_seconds: int = 300
+    whoop_sync_lookback_days: int = 30
+    whoop_sync_page_limit: int = 25
+    whoop_auto_sync_enabled: bool = True
+    whoop_auto_sync_hour: int = 4
+    auto_sync_enabled: bool = True
+    auto_sync_hours: str = "06,14,22"
+    ai_enabled: bool = False
+    ai_provider: str = "local"
+    ai_daily_auto_enabled: bool = False
+    openai_api_key: str = ""
+    openai_model: str = "gpt-5-mini"
+    openai_chat_enabled: bool = False
+    openai_timeout_seconds: int = 30
+    openai_max_output_tokens: int = 800
+    openai_max_tool_rounds: int = 4
+    openai_daily_request_limit: int = 50
+    openai_monthly_budget_brl: float | None = None
+    ai_chat_timeout_seconds: int = 30
+    ai_chat_max_message_chars: int = 4000
+    ai_chat_rate_limit_per_minute: int = 20
+    ai_conversation_summary_message_limit: int = 30
     upload_dir: Path = Path("./data/uploads")
     export_dir: Path = Path("./data/exports")
 
@@ -41,6 +70,16 @@ class Settings(BaseSettings):
     @property
     def effective_strava_redirect_uri(self) -> str:
         return self.strava_redirect_uri or f"{self.app_public_base_url}/integrations/strava/callback"
+
+    @property
+    def whoop_configured(self) -> bool:
+        return self.whoop_enabled and bool(
+            self.whoop_client_id and self.whoop_client_secret and self.token_encryption_key
+        )
+
+    @property
+    def effective_whoop_redirect_uri(self) -> str:
+        return self.whoop_redirect_uri or f"{self.app_public_base_url}/integrations/whoop/callback"
 
 
 @lru_cache

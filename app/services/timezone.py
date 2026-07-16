@@ -29,6 +29,10 @@ def local_date(value: datetime, timezone_name: str = "America/Sao_Paulo") -> dat
     return to_local(value, timezone_name).date()  # type: ignore[union-attr]
 
 
+def local_today(timezone_name: str = "America/Sao_Paulo") -> date:
+    return utc_now().astimezone(ZoneInfo(timezone_name)).date()
+
+
 def seconds_to_human(seconds: int | float | None) -> str:
     if seconds is None:
         return "-"

@@ -1,4 +1,5 @@
 import json
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -55,11 +56,20 @@ def sync_strava(db: Session, user_id: int, client: StravaClient | None = None) -
     db.flush()
     stats = {"fetched": 0, "created": 0, "linked": 0, "possible_duplicates": 0, "skipped": 0, "errors": 0}
     api = client or StravaClient()
+    settings = get_settings()
+    max_items = settings.strava_sync_max_activities_per_run
+    deadline = time.monotonic() + settings.strava_sync_max_runtime_seconds
+    stopped_early = False
     try:
         token = _fresh_access_token(db, credential, state, api)
-        overlap = timedelta(minutes=get_settings().strava_sync_overlap_minutes)
+        overlap = timedelta(minutes=settings.strava_sync_overlap_minutes)
         after = state.last_synced_at - overlap if state.last_synced_at else None
+        _update_progress(log, stats, max_items, "running")
+        db.commit()
         for payload in api.activities(token, after):
+            if _work_count(stats) >= max_items or time.monotonic() >= deadline:
+                stopped_early = True
+                break
             stats["fetched"] += 1
             try:
                 normalized = _normalize_payload(payload)
@@ -80,33 +90,39 @@ def sync_strava(db: Session, user_id: int, client: StravaClient | None = None) -
                 stats["errors"] += 1
             except (KeyError, TypeError, ValueError):
                 stats["errors"] += 1
-        state.last_synced_at = utc_now()
-        state.sync_cursor_at = state.last_synced_at
+            _update_progress(log, stats, max_items, "running")
+            db.commit()
+        if not stopped_early:
+            state.last_synced_at = utc_now()
+            state.sync_cursor_at = state.last_synced_at
         state.status = "connected"
         state.last_error = None
         state.last_imported_count = stats["created"] + stats["linked"] + stats["possible_duplicates"]
         log.status = "completed"
-        log.message = (
-            f"fetched={stats['fetched']} created={stats['created']} linked={stats['linked']} "
-            f"possible_duplicates={stats['possible_duplicates']} skipped={stats['skipped']} errors={stats['errors']}"
-        )
+        _update_progress(log, stats, max_items, "completed")
     except StravaAuthenticationError:
         state.status = "reconnect_required"
         state.last_error = "Credencial Strava invalida ou revogada."
         log.status = "failed"
-        log.message = state.last_error
+        _update_progress(log, stats, max_items, "failed", state.last_error)
         raise
     except StravaRateLimitError:
         state.status = "rate_limited"
         state.last_error = "Limite de requisicoes Strava atingido."
         log.status = "failed"
-        log.message = state.last_error
+        _update_progress(log, stats, max_items, "failed", state.last_error)
         raise
     except StravaError as exc:
         state.status = "error"
         state.last_error = "Falha temporaria ao sincronizar Strava."
         log.status = "failed"
-        log.message = state.last_error
+        _update_progress(log, stats, max_items, "failed", state.last_error)
+        raise exc
+    except Exception as exc:
+        state.status = "error"
+        state.last_error = "Falha interna ao sincronizar Strava."
+        log.status = "failed"
+        _update_progress(log, stats, max_items, "failed", state.last_error)
         raise exc
     finally:
         log.finished_at = utc_now()
@@ -114,12 +130,38 @@ def sync_strava(db: Session, user_id: int, client: StravaClient | None = None) -
     return stats
 
 
+def _update_progress(
+    log: SyncLog,
+    stats: dict[str, int],
+    max_items: int,
+    status: str,
+    error: str | None = None,
+) -> None:
+    processed = min(_work_count(stats), max_items)
+    remaining = max(max_items - processed, 0)
+    payload = {
+        "status": status,
+        "processed": processed,
+        "limit": max_items,
+        "remaining_in_run": remaining,
+        **stats,
+    }
+    if error:
+        payload["error"] = error
+    log.message = json.dumps(payload, sort_keys=True)
+
+
+def _work_count(stats: dict[str, int]) -> int:
+    return stats["created"] + stats["linked"] + stats["possible_duplicates"] + stats["errors"]
+
+
 def _fresh_access_token(
     db: Session, credential: OAuthCredential, state: IntegrationState, client: StravaClient
 ) -> str:
     access = decrypt_token(credential.encrypted_access_token)
     margin = timedelta(seconds=get_settings().strava_refresh_margin_seconds)
-    if credential.expires_at and credential.expires_at > utc_now() + margin:
+    expires_at = _ensure_utc(credential.expires_at)
+    if expires_at and expires_at > utc_now() + margin:
         return access
     refresh = decrypt_token(credential.encrypted_refresh_token or "")
     response = client.refresh(refresh)
@@ -130,6 +172,14 @@ def _fresh_access_token(
     db.add(credential)
     db.flush()
     return response["access_token"]
+
+
+def _ensure_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _sync_activity(

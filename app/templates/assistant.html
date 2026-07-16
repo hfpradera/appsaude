@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-title">
+  <div>
+    <p class="eyebrow">Assistente IA</p>
+    <h1>Conversa com memoria controlada</h1>
+  </div>
+  <button type="button" id="new-conversation">Nova conversa</button>
+</section>
+
+<section class="assistant-layout">
+  <aside class="panel conversation-list">
+    <h2>Conversas</h2>
+    <div id="conversation-list">
+      {% for conversation in conversations %}
+      <button type="button" data-conversation-id="{{ conversation.id }}">{{ conversation.title }}</button>
+      {% endfor %}
+    </div>
+  </aside>
+  <article class="panel chat-panel">
+    <div id="assistant-status" class="muted">Modo local quando a IA online estiver desligada.</div>
+    <div id="chat-messages" class="chat-messages">
+      <p class="muted">Escolha ou crie uma conversa.</p>
+    </div>
+    <div class="shortcut-row">
+      {% for label in ["Como estou hoje?", "O que devo comer agora?", "Qual tenis usar hoje?", "Registrar uma refeicao", "Registrar tenis utilizado", "Comparar minha semana", "Ver dados faltantes"] %}
+      <button type="button" class="secondary" data-shortcut="{{ label }}">{{ label }}</button>
+      {% endfor %}
+    </div>
+    <form id="chat-form" class="chat-form">
+      <textarea id="chat-input" maxlength="4000" placeholder="Escreva sua mensagem"></textarea>
+      <button type="submit">Enviar</button>
+    </form>
+    <div id="tool-cards" class="tool-cards"></div>
+  </article>
+</section>
+
+<script>
+let activeConversation = null;
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+}
+async function refreshConversations() {
+  const response = await fetch("/api/ai/conversations");
+  const data = await response.json();
+  document.getElementById("conversation-list").innerHTML = data.conversations.map(item => `<button type="button" data-conversation-id="${item.id}">${esc(item.title)}</button>`).join("");
+}
+async function loadConversation(id) {
+  activeConversation = id;
+  const response = await fetch(`/api/ai/conversations/${id}`);
+  const data = await response.json();
+  renderMessages(data.conversation.messages || []);
+}
+function renderMessages(messages) {
+  document.getElementById("chat-messages").innerHTML = messages.length ? messages.map(message => `<div class="chat-bubble ${esc(message.role)}"><strong>${message.role === "user" ? "Voce" : "Assistente"}</strong><p>${esc(message.content)}</p></div>`).join("") : `<p class="muted">Conversa vazia.</p>`;
+}
+function renderToolCards(cards) {
+  const labels = {
+    create_shoe: "Tenis cadastrado",
+    associate_shoe_with_activity: "Atividade associada ao tenis",
+    create_meal_log: "Refeicao registrada",
+    sync_integrations: "Sincronizacao solicitada",
+    create_manual_shoe_usage: "Uso de tenis registrado",
+    save_daily_note: "Nota do dia salva",
+    save_planned_activity: "Treino planejado salvo"
+  };
+  const visible = (cards || []).filter(card => {
+    const pending = card.data && card.data.pending_action;
+    return pending || card.status !== "ok";
+  });
+  document.getElementById("tool-cards").innerHTML = visible.map(card => {
+    const pending = card.data && card.data.pending_action;
+    if (pending) {
+      return `<div class="tool-card" data-pending-id="${pending.id}"><strong>Confirmacao necessaria</strong><span>${esc(pending.summary)}</span><button type="button" data-confirm-pending="${pending.id}">Confirmar</button><button type="button" class="secondary" data-cancel-pending="${pending.id}">Cancelar</button></div>`;
+    }
+    return `<div class="tool-card"><strong>${esc(labels[card.tool] || "Atencao")}</strong><span>Preciso que voce confira essa etapa.</span></div>`;
+  }).join("");
+}
+function streamRun(runId) {
+  if (!runId || !window.EventSource) return;
+  const status = document.getElementById("assistant-status");
+  status.textContent = "Resposta pronta. Abrindo fluxo...";
+  const source = new EventSource(`/api/ai/runs/${runId}/stream`);
+  let streamed = "";
+  source.addEventListener("status", event => {
+    const data = JSON.parse(event.data);
+    status.textContent = `Execucao: ${data.status}`;
+  });
+  source.addEventListener("delta", event => {
+    streamed += JSON.parse(event.data).text;
+    status.textContent = "Recebendo resposta...";
+  });
+  source.addEventListener("done", async () => {
+    source.close();
+    status.textContent = streamed ? "Resposta concluida." : "Concluido.";
+    if (activeConversation) await loadConversation(activeConversation);
+  });
+  source.onerror = () => {
+    source.close();
+    status.textContent = "Fluxo encerrado.";
+  };
+}
+document.addEventListener("click", async event => {
+  const conversationButton = event.target.closest("[data-conversation-id]");
+  if (conversationButton) await loadConversation(conversationButton.dataset.conversationId);
+  const shortcut = event.target.closest("[data-shortcut]");
+  if (shortcut) document.getElementById("chat-input").value = shortcut.dataset.shortcut;
+  const confirm = event.target.closest("[data-confirm-pending]");
+  if (confirm) {
+    await fetch(`/api/ai/pending-actions/${confirm.dataset.confirmPending}/confirm`, { method: "POST" });
+    if (activeConversation) await loadConversation(activeConversation);
+    document.getElementById("assistant-status").textContent = "Acao confirmada.";
+  }
+  const cancel = event.target.closest("[data-cancel-pending]");
+  if (cancel) {
+    await fetch(`/api/ai/pending-actions/${cancel.dataset.cancelPending}/cancel`, { method: "POST" });
+    document.getElementById("assistant-status").textContent = "Acao cancelada.";
+    cancel.closest(".tool-card")?.remove();
+  }
+});
+document.getElementById("new-conversation").addEventListener("click", async () => {
+  const response = await fetch("/api/ai/conversations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+  const data = await response.json();
+  await refreshConversations();
+  await loadConversation(data.conversation.id);
+});
+document.getElementById("chat-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!activeConversation) {
+    const response = await fetch("/api/ai/conversations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+    const data = await response.json();
+    activeConversation = data.conversation.id;
+    await refreshConversations();
+  }
+  const input = document.getElementById("chat-input");
+  const content = input.value.trim();
+  if (!content) return;
+  input.value = "";
+  document.getElementById("assistant-status").textContent = "Processando...";
+  const response = await fetch(`/api/ai/conversations/${activeConversation}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) });
+  const data = await response.json();
+  await loadConversation(activeConversation);
+  renderToolCards(data.tool_cards || []);
+  streamRun(data.run && data.run.id);
+});
+</script>
+{% endblock %}

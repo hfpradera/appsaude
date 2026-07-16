@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-title shoes-title">
+  <div>
+    <p class="eyebrow">Tenis</p>
+    <h1>Tenis de corrida</h1>
+  </div>
+</section>
+
+<section class="shoe-summary-grid" aria-label="Resumo dos tenis">
+  <article class="metric-card">
+    <span>Tenis ativos</span>
+    <strong id="active-shoes">{{ shoes|length }}</strong>
+  </article>
+  <article class="metric-card">
+    <span>Km conhecidos</span>
+    <strong id="known-km">-</strong>
+    <small>Atividades sem distancia ficam separadas.</small>
+  </article>
+  <article class="metric-card">
+    <span>Usos registrados</span>
+    <strong id="usage-count">-</strong>
+  </article>
+</section>
+
+<section class="shoe-layout">
+  <article class="panel shoe-form-panel">
+    <div class="panel-head">
+      <div>
+        <h2>Cadastrar tenis</h2>
+        <p class="muted">Registre o tenis uma vez e depois associe as corridas pelo assistente ou pela atividade.</p>
+      </div>
+    </div>
+    <form id="shoe-form" class="shoe-form">
+      <label class="wide">Nome do tenis <input name="name" required placeholder="Ex.: Novablast preto com azul"></label>
+      <label>Marca <input name="brand" placeholder="Ex.: Asics"></label>
+      <label>Modelo <input name="model" placeholder="Ex.: Novablast"></label>
+      <label>Cor <input name="color" placeholder="Ex.: preto com azul"></label>
+      <label>Km que ele ja tinha <input name="initial_distance_km" type="number" step="0.1" value="0"></label>
+      <label>Vida util minima <input name="expected_min_km" type="number" step="1" placeholder="Ex.: 500"></label>
+      <label>Vida util maxima <input name="expected_max_km" type="number" step="1" placeholder="Ex.: 800"></label>
+      <label class="wide">Observacoes <textarea name="condition_notes" placeholder="Ex.: usar em treinos leves, sola boa, comprado em julho"></textarea></label>
+      <button type="submit">Salvar tenis</button>
+    </form>
+  </article>
+
+  <article class="panel shoe-list-panel">
+    <div class="panel-head">
+      <div>
+        <h2>Seus tenis</h2>
+        <p class="muted">Km acumulado soma apenas atividades que vieram com distancia.</p>
+      </div>
+    </div>
+    <div id="shoe-list" class="shoe-grid"></div>
+  </article>
+</section>
+
+<script>
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+}
+function fmtDate(value) {
+  if (!value) return "Sem uso registrado";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Sem uso registrado";
+  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+function shoeProgress(shoe) {
+  const max = Number(shoe.expected_max_km || 0);
+  if (!max) return 0;
+  return Math.min(100, Math.round((Number(shoe.total_distance_km || 0) / max) * 100));
+}
+function renderShoe(shoe) {
+  const progress = shoeProgress(shoe);
+  const unknown = Number(shoe.unknown_distance_activity_count || 0);
+  const unknownText = unknown ? `<span class="warning-note">${unknown} atividade${unknown > 1 ? "s" : ""} sem distancia</span>` : "";
+  const estimate = shoe.expected_max_km ? `${esc(shoe.total_distance_km)} de ${esc(shoe.expected_max_km)} km` : "Vida util nao configurada";
+  const recent = (shoe.recent_usages || []).slice(0, 3).map(item => `<li><span>${esc(item.type || "atividade")}</span><strong>${item.distance_km ? `${esc(item.distance_km)} km` : "sem distancia"}</strong></li>`).join("");
+  return `<article class="shoe-card friendly-shoe-card">
+    <div class="shoe-card-head">
+      <div>
+        <strong>${esc(shoe.name)}</strong>
+        <span>${esc([shoe.brand, shoe.model, shoe.color].filter(Boolean).join(" | ") || "Dados basicos pendentes")}</span>
+      </div>
+      <span class="status-pill ${shoe.status === "active" ? "ok" : ""}">${shoe.status === "active" ? "ativo" : esc(shoe.status)}</span>
+    </div>
+    <div class="shoe-stat-row">
+      <div><span>Km conhecidos</span><strong>${esc(shoe.total_distance_km)} km</strong></div>
+      <div><span>Usos</span><strong>${esc(shoe.usage_count || 0)}</strong></div>
+      <div><span>Ultimo uso</span><strong>${esc(fmtDate(shoe.last_use))}</strong></div>
+    </div>
+    <div class="shoe-progress" aria-label="Progresso da vida util"><span style="width:${progress}%"></span></div>
+    <div class="shoe-card-footer"><span>${esc(estimate)}</span>${unknownText}</div>
+    ${recent ? `<ul class="shoe-usage-list">${recent}</ul>` : `<p class="muted">Nenhuma atividade associada ainda.</p>`}
+  </article>`;
+}
+async function reloadShoes() {
+  const response = await fetch("/api/shoes");
+  const data = await response.json();
+  const shoes = data.shoes || [];
+  document.getElementById("shoe-list").innerHTML = shoes.map(renderShoe).join("") || `<p class="muted">Nenhum tenis cadastrado.</p>`;
+  document.getElementById("active-shoes").textContent = shoes.filter(shoe => shoe.status === "active").length;
+  document.getElementById("known-km").textContent = `${shoes.reduce((sum, shoe) => sum + Number(shoe.total_distance_km || 0), 0).toFixed(1)} km`;
+  document.getElementById("usage-count").textContent = shoes.reduce((sum, shoe) => sum + Number(shoe.usage_count || 0), 0);
+}
+document.getElementById("shoe-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const payload = Object.fromEntries(new FormData(event.target).entries());
+  await fetch("/api/shoes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  event.target.reset();
+  event.target.elements.initial_distance_km.value = "0";
+  await reloadShoes();
+});
+reloadShoes();
+</script>
+{% endblock %}

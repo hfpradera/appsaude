@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-title">
+  <div>
+    <p class="eyebrow">Memoria da IA</p>
+    <h1>Memorias confirmadas</h1>
+  </div>
+</section>
+
+<section class="panel">
+  <p class="muted">Somente memorias confirmadas por voce podem ser usadas como fato permanente.</p>
+  {% if memories %}
+  <table>
+    <thead><tr><th>Categoria</th><th>Chave</th><th>Valor</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for memory in memories %}
+      <tr>
+        <td>{{ memory.category }}</td>
+        <td>{{ memory.key }}</td>
+        <td>{{ memory.value_json }}</td>
+        <td>{{ "ativa" if memory.active else "apagada" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>Nenhuma memoria registrada.</p>
+  {% endif %}
+</section>
+{% endblock %}
