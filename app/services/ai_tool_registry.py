@@ -18,11 +18,11 @@ READ_TOOLS = {
     "get_shoe_recommendation_context",
     "get_data_quality",
     "get_sync_status",
+    "get_activities_without_shoe",
 }
 
 WRITE_TOOLS = {
     "create_meal_log",
-    "create_shoe",
     "associate_shoe_with_activity",
     "create_manual_shoe_usage",
     "save_daily_note",
@@ -38,6 +38,7 @@ CONFIRMATION_TOOLS = {
     "delete_memory",
     "update_shoe",
     "retire_shoe",
+    "create_shoe",
 }
 
 ALLOWED_TOOLS = READ_TOOLS | WRITE_TOOLS | CONFIRMATION_TOOLS
@@ -93,6 +94,15 @@ def tool_definitions() -> list[dict[str, Any]]:
             "Consulta o estado da ultima sincronizacao de Strava e/ou WHOOP.",
             {"source": _enum(["all", "strava", "whoop"])},
             ["source"],
+        ),
+        _tool(
+            "get_activities_without_shoe",
+            "Lista atividades sincronizadas de um dia que ainda nao tem tenis associado.",
+            {
+                "day": _date("Dia YYYY-MM-DD."),
+                "activity_type": _string("Tipo opcional.", nullable=True),
+            },
+            ["day"],
         ),
         _tool(
             "sync_integrations",

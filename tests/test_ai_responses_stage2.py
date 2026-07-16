@@ -329,13 +329,13 @@ def test_successful_tools_without_final_text_get_action_summary(db_session):
     settings = _settings_online()
     settings.openai_max_tool_rounds = 0
     conversation = create_conversation(db_session, user.id)
-    client = FakeClient([fake_call("create_shoe", {"name": "Novablast preto com azul"})])
+    client = FakeClient([fake_call("create_meal_log", {"description": "arroz e ovo"})])
 
-    response = send_message(db_session, user.id, conversation.id, "cadastre meu tenis", client=client)
+    response = send_message(db_session, user.id, conversation.id, "comi arroz e ovo", client=client)
 
     assert response["run"]["status"] == "completed"
     assert "Consegui executar" in response["message"]["content"]
-    assert "cadastrei o tenis" in response["message"]["content"]
+    assert "registrei a refeicao" in response["message"]["content"]
     assert "Nao consegui concluir" not in response["message"]["content"]
 
 

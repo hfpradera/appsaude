@@ -146,6 +146,10 @@ def _dispatch(db: Session, user_id: int, tool_name: str, arguments: dict[str, An
         return ai_tools.get_data_quality(db, user_id, _date(arguments["day"]))
     if tool_name == "get_sync_status":
         return ai_tools.get_sync_status(db, user_id, str(arguments.get("source") or "all"))
+    if tool_name == "get_activities_without_shoe":
+        return ai_tools.get_activities_without_shoe(
+            db, user_id, _date(arguments["day"]), arguments.get("activity_type")
+        )
     if tool_name == "sync_integrations":
         return ai_tools.sync_integrations(db, user_id, str(arguments.get("source") or "all"))
     if tool_name == "create_meal_log":
@@ -257,4 +261,6 @@ def _summary(tool_name: str, arguments: dict[str, Any]) -> str:
         return f"Apagar memoria #{arguments.get('memory_id')}."
     if tool_name == "update_shoe":
         return f"Atualizar tenis #{arguments.get('shoe_id')}."
+    if tool_name == "create_shoe":
+        return f"Cadastrar tenis novo '{arguments.get('name')}'."
     return f"Executar {tool_name}."

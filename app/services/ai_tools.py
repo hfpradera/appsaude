@@ -759,6 +759,36 @@ def find_activity_candidates(
     return candidates
 
 
+def get_activities_without_shoe(
+    db: Session, user_id: int, day: date, activity_type: str | None = None
+) -> ToolResult:
+    candidates = find_activity_candidates(db, user_id, day, activity_type=activity_type)
+    if not candidates:
+        return ToolResult(True, "Nenhuma atividade encontrada nesse dia.", {"activities": [], "source": "activities"})
+    ids = [item.id for item in candidates]
+    linked_ids = {
+        link.activity_id
+        for link in db.scalars(select(ShoeActivityLink).where(ShoeActivityLink.activity_id.in_(ids)))
+    }
+    unlinked = [item for item in candidates if item.id not in linked_ids]
+    return ToolResult(
+        True,
+        "Atividades sem tenis associado encontradas." if unlinked else "Todas as atividades desse dia ja tem tenis associado.",
+        {
+            "activities": [
+                {
+                    "id": item.id,
+                    "activity_type": item.activity_type,
+                    "distance_km": round(item.distance_meters / 1000, 2) if item.distance_meters else None,
+                    "started_at": _iso(item.started_at),
+                }
+                for item in unlinked
+            ],
+            "source": "activities",
+        },
+    )
+
+
 def _sync_sources(source: str) -> list[str]:
     normalized = (source or "all").strip().lower()
     if normalized == "all":
